@@ -47,6 +47,8 @@ BUILDMEDIC_RUNNER_PROFILES=./var/runner-profiles.json
 
 任务详情显示登记 profile、源码清单指纹和下载链接。`source_snapshot` 包含绑定、传输归档 SHA256、清单与完整 profile 的产物 ID；产物继续检查任务会话归属。已登记任务的重试不换用新 profile，重新验证固定原提交与原补丁；配置变化时停止并保留原结果。
 
+长日志按完整脱敏产物建立失败窗口、步骤和时间戳索引。未登记仓库的日志诊断与修复基线优先保留失败位置，归档实际模型片段及省略范围；详情页可按原始行号跳转、分页和续读超长行，见[日志证据](logs.md)。
+
 ## 接入限制
 
 - 只从固定的 `codeload.github.com` HTTPS 地址下载完整 SHA 的公开归档，不发送 GitHub 凭据或 cookie，不跟随重定向。固定 Git 引用支持与 GitHub 的[仓库归档接口](https://docs.github.com/en/rest/repos/contents#download-a-repository-archive-tar)一致；项目在下载后另核对管理员登记的完整内容清单。

@@ -124,6 +124,39 @@ export const harnessSchema = z.object({
     }),
   ),
 });
+export const logIndexSchema = z.object({
+  schema_version: z.literal("1.0"),
+  sha256: z.string(),
+  total_lines: z.number(),
+  size_bytes: z.number(),
+  sections_truncated: z.boolean(),
+  sections: z.array(
+    z.object({
+      kind: z.string(),
+      priority: z.number(),
+      line_start: z.number(),
+      line_end: z.number(),
+      marker_line: z.number(),
+      step: z.string().nullable(),
+      timestamp: z.string().nullable(),
+    }),
+  ),
+});
+export const logWindowSchema = z.object({
+  artifact_id: z.string(),
+  sha256: z.string(),
+  total_lines: z.number(),
+  lines: z.array(
+    z.object({
+      number: z.number(),
+      content: z.string(),
+      column: z.number(),
+      complete: z.boolean(),
+    }),
+  ),
+  next_line: z.number().nullable(),
+  next_column: z.number().nullable(),
+});
 export const evidenceSchema = z.object({
   id: z.string(),
   kind: z.string(),
@@ -132,6 +165,9 @@ export const evidenceSchema = z.object({
   line_start: z.number(),
   line_end: z.number(),
   excerpt: z.string(),
+  excerpt_truncated: z.boolean().optional(),
+  log_index: logIndexSchema.optional(),
+  log_context_artifact_ids: z.array(z.string()).optional(),
 });
 export const experienceVersionSchema = z.object({
   id: z.string(),

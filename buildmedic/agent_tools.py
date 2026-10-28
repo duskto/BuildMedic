@@ -201,7 +201,19 @@ class ToolSession:
                 for path, text in self.sources.items()
             ],
             "log_index": [
-                {"artifact_id": aid, "kind": ev["kind"], "evidence_id": ev["id"]}
+                {
+                    "artifact_id": aid,
+                    "kind": ev["kind"],
+                    "evidence_id": ev["id"],
+                    "total_lines": ev.get("log_index", {}).get("total_lines"),
+                    "sections": [
+                        {
+                            k: section[k]
+                            for k in ("kind", "line_start", "line_end", "marker_line", "step", "timestamp")
+                        }
+                        for section in ev.get("log_index", {}).get("sections", [])
+                    ],
+                }
                 for aid, ev in self.logs.items()
             ],
             "visible_execution_ids": sorted(self.executions),

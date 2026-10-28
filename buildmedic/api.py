@@ -20,6 +20,7 @@ from .database import require_schema
 from .errors import AppError, Blocked
 from .github import GitHubClient
 from .harness_support import capability
+from .logs import LogWindow, log_window
 from .profiles import match_profile
 from .schemas import CreateTask, Envelope, Lifecycle, Preview, TaskPage, TaskSnapshot, ValidationRequest
 from .security import read_owner, sanitize, sign_owner
@@ -355,7 +356,9 @@ def experiment_report(eid: str, request: Request):
     )
 
 
-@app.get("/api/v1/experiments/{eid}/analysis", response_model=Envelope[evaluation_analysis.EvaluationAnalysis])
+@app.get(
+    "/api/v1/experiments/{eid}/analysis", response_model=Envelope[evaluation_analysis.EvaluationAnalysis]
+)
 def experiment_analysis(eid: str, request: Request):
     return envelope(request, evaluation_analysis.analyze(evaluation.get(eid, request.state.owner)))
 
@@ -484,6 +487,20 @@ def get_validations(tid: str, request: Request):
 def revalidate(tid: str, request: Request, body: ValidationRequest):
     vid = store.enqueue_validation(tid, request.state.owner, body.candidate_id)
     return envelope(request, {"validation_id": vid, "status": "queued"})
+
+
+@app.get("/api/v1/tasks/{tid}/artifacts/{aid}/lines", response_model=Envelope[LogWindow])
+def get_log_lines(
+    tid: str,
+    aid: str,
+    request: Request,
+    start_line: int = Query(1, ge=1),
+    start_column: int = Query(0, ge=0, le=2000000),
+    max_lines: int = Query(100, ge=1, le=200),
+):
+    artifact = store.get_artifact(tid, aid, request.state.owner)
+    response = envelope(request, log_window(artifact, start_line, start_column, max_lines).model_dump())
+    return JSONResponse(response, headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/api/v1/tasks/{tid}/artifacts/{aid}")

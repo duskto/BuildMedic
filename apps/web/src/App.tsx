@@ -39,6 +39,7 @@ import {
 import { z } from "zod";
 import { api, artifactUrl, readArtifact } from "./api";
 import { AgentActions } from "./AgentActions";
+import { LogViewer } from "./LogViewer";
 import { Experiments, ExperimentDetail } from "./Experiments";
 import {
   ExperienceLibrary,
@@ -1767,10 +1768,11 @@ function EvidenceCard({
   highlighted: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const isLog = ["ci_log", "baseline_log", "test_log"].includes(e.kind);
   const text = useQuery({
     queryKey: ["artifact", taskId, e.artifact_id],
     queryFn: () => readArtifact(taskId, e.artifact_id),
-    enabled: expanded,
+    enabled: expanded && !isLog,
   });
   return (
     <article
@@ -1788,11 +1790,31 @@ function EvidenceCard({
         来源行号 L{e.line_start}–L{e.line_end}
       </small>
       <pre className="log-excerpt">{e.excerpt}</pre>
+      {e.log_context_artifact_ids?.map((aid, i) => (
+        <p key={aid}>
+          <a className="text-link" href={artifactUrl(taskId, aid, true)}>
+            下载模型使用的日志片段 {i + 1}
+          </a>
+        </p>
+      ))}
+      {e.excerpt_truncated && (
+        <p className="small-note">摘要已截断，展开上下文可按页查看完整内容。</p>
+      )}
       <button className="text-link" onClick={() => setExpanded((v) => !v)}>
         {expanded ? "收起上下文" : "展开完整上下文"}
         <ChevronRight size={14} />
       </button>
-      {expanded && (
+      {expanded && isLog && (
+        <LogViewer
+          key={e.artifact_id}
+          taskId={taskId}
+          artifactId={e.artifact_id}
+          index={e.log_index}
+          initialLine={e.line_start}
+          highlightEnd={e.line_end}
+        />
+      )}
+      {expanded && !isLog && (
         <>
           <ErrorBox error={text.error} />
           {text.isPending ? (
@@ -1827,11 +1849,6 @@ function ExecutionLog({
   taskId: string;
 }) {
   const [open, setOpen] = useState(false);
-  const log = useQuery({
-    queryKey: ["artifact", taskId, e.stdout_artifact_id],
-    queryFn: () => readArtifact(taskId, e.stdout_artifact_id!),
-    enabled: open && !!e.stdout_artifact_id,
-  });
   return (
     <div className="execution-log">
       <button onClick={() => setOpen((v) => !v)}>
@@ -1846,8 +1863,15 @@ function ExecutionLog({
       {open && (
         <>
           <code className="command">{e.command?.join(" ") ?? "执行中"}</code>
-          <ErrorBox error={log.error} />
-          <pre className="log-excerpt">{log.data ?? "等待日志产物…"}</pre>
+          {e.stdout_artifact_id ? (
+            <LogViewer
+              key={e.stdout_artifact_id}
+              taskId={taskId}
+              artifactId={e.stdout_artifact_id}
+            />
+          ) : (
+            <p>等待日志产物…</p>
+          )}
         </>
       )}
     </div>

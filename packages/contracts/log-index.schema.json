@@ -1,0 +1,112 @@
+{
+  "$defs": {
+    "LogSection": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "traceback",
+            "exception",
+            "test_failure",
+            "dependency",
+            "ci_error"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "line_start": {
+          "title": "Line Start",
+          "type": "integer"
+        },
+        "line_end": {
+          "title": "Line End",
+          "type": "integer"
+        },
+        "marker_line": {
+          "title": "Marker Line",
+          "type": "integer"
+        },
+        "priority": {
+          "title": "Priority",
+          "type": "integer"
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step"
+        },
+        "timestamp": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timestamp"
+        }
+      },
+      "required": [
+        "kind",
+        "line_start",
+        "line_end",
+        "marker_line",
+        "priority"
+      ],
+      "title": "LogSection",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Sha256",
+      "type": "string"
+    },
+    "total_lines": {
+      "title": "Total Lines",
+      "type": "integer"
+    },
+    "size_bytes": {
+      "title": "Size Bytes",
+      "type": "integer"
+    },
+    "sections": {
+      "items": {
+        "$ref": "#/$defs/LogSection"
+      },
+      "maxItems": 24,
+      "title": "Sections",
+      "type": "array"
+    },
+    "sections_truncated": {
+      "title": "Sections Truncated",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "sha256",
+    "total_lines",
+    "size_bytes",
+    "sections",
+    "sections_truncated"
+  ],
+  "title": "LogIndex",
+  "type": "object"
+}

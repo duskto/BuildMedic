@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "LogLine": {
+      "additionalProperties": false,
+      "properties": {
+        "number": {
+          "title": "Number",
+          "type": "integer"
+        },
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "column": {
+          "title": "Column",
+          "type": "integer"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "number",
+        "content",
+        "column",
+        "complete"
+      ],
+      "title": "LogLine",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "artifact_id": {
+      "title": "Artifact Id",
+      "type": "string"
+    },
+    "sha256": {
+      "title": "Sha256",
+      "type": "string"
+    },
+    "total_lines": {
+      "title": "Total Lines",
+      "type": "integer"
+    },
+    "lines": {
+      "items": {
+        "$ref": "#/$defs/LogLine"
+      },
+      "title": "Lines",
+      "type": "array"
+    },
+    "next_line": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Next Line"
+    },
+    "next_column": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Next Column"
+    }
+  },
+  "required": [
+    "artifact_id",
+    "sha256",
+    "total_lines",
+    "lines",
+    "next_line",
+    "next_column"
+  ],
+  "title": "LogWindow",
+  "type": "object"
+}

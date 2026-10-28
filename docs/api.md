@@ -31,6 +31,7 @@ API 根路径为 `/api/v1`。成功返回 `{data, request_id}`，错误返回 `{
 | GET | `/experiments/{id}/report` | 下载含冻结输入的离线复算证据包 |
 | GET | `/experiments/{id}/analysis` | 重复轮次与同案例配对的描述统计，绑定来源报告 hash |
 | GET | `/experiments/{id}/analysis/report` | 下载独立分析及来源证据包；不修改公开报告与评分回执 |
+| GET | `/tasks/{id}/artifacts/{aid}/lines` | 按行及字符列游标读取当前任务脱敏日志；最多 200 行 / 16 KB 源文本 |
 | POST / GET | `/experiments/{id}/score` | 启动 / 查询整批完成后的独立评分，不接收请求体 |
 | GET | `/experiments/{id}/score/report` | 下载经服务端验证的评分回执，检查会话归属 |
 
@@ -43,6 +44,8 @@ API 根路径为 `/api/v1`。成功返回 `{data, request_id}`，错误返回 `{
 GitHub source 必须同时包含 `run_url`、`run_attempt`、`job_id`。服务端重新查询并确认 Job 属于固定 attempt 和 SHA。仅公开仓库；匹配管理员登记的仓库 / SHA / workflow / Job 后支持本地独立复现与修复，未登记来源仅做日志诊断。需要读取受保护日志时在服务端配置 GitHub Token。浏览器不能提交 profile、命令或镜像。
 
 GitHub URL 仅接受 `https://github.com/owner/repo/actions/runs/id`，可使用 `?attempt=2` 固定运行次数。下载仅跟随经过主机校验的官方日志重定向，并使用独立 HTTP client，避免把 API Authorization 透传给下载主机。
+
+日志证据可包含 `log_index`、`excerpt_truncated` 与 `log_context_artifact_ids`。失败窗口的行号、时间戳和步骤来自完整脱敏产物；模型节选另归档来源及省略范围。`/lines` 接受 `start_line`、`start_column` 和 `max_lines`，返回原行号、分段内容及下一页游标；超长行下一页可能仍是同一行。身份检查、限制和完整示例见[日志阅读](logs.md)。
 
 `lifecycle`、`phase`、`outcome` 和验证状态分别表达平台执行、业务阶段、结论及独立验收。`completed + unresolved` 是正常业务结束；`completed + repaired` 必须有原失败复现与最终独立检查证据。
 

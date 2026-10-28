@@ -6,6 +6,7 @@ from pathlib import Path
 from buildmedic.api import app
 from buildmedic.evaluation import SPEC_ADAPTER
 from buildmedic.evaluation_analysis import EvaluationAnalysis
+from buildmedic.logs import LogIndex, LogWindow
 from buildmedic.schemas import CreateTask, Diagnosis, ExecutionRequest, TaskEvent, TaskSnapshot
 from buildmedic.scoring_protocol import ScoreReceipt, ScoreRequest
 
@@ -20,6 +21,8 @@ for name, schema in {
     "task-event": TaskEvent.model_json_schema(),
     "experiment-spec": SPEC_ADAPTER.json_schema(),
     "experiment-analysis": EvaluationAnalysis.model_json_schema(),
+    "log-index": LogIndex.model_json_schema(),
+    "log-window": LogWindow.model_json_schema(),
     "score-request": ScoreRequest.model_json_schema(),
     "score-receipt": ScoreReceipt.model_json_schema(),
 }.items():

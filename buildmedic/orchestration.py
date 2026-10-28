@@ -16,6 +16,7 @@ from .clients import ModelClient, RunnerClient
 from .config import settings
 from .errors import AppError, Blocked, BudgetExceeded, Cancelled
 from .github import GitHubClient
+from .logs import LOG_KINDS, context_log, index_log
 from .patching import apply_patch, patch_from_edits
 from .profiles import match_profile, registered, relative_path
 from .schemas import Diagnosis
@@ -203,7 +204,8 @@ class Context:
 
     def evidence(self, kind, text, path=None, excerpt=None):
         art = self.artifact(kind, text)
-        lines = sanitize(text).splitlines()
+        cleaned = sanitize(text)
+        lines = cleaned.splitlines()
         # Prefer actual failures while retaining the complete sanitized artifact.
         at = next(
             (
@@ -225,8 +227,41 @@ class Context:
             "line_end": min(len(lines), at + 12),
             "excerpt": excerpt or "\n".join(lines[at : at + 12]),
         }
+        if kind in LOG_KINDS:
+            index = index_log(cleaned)
+            item["log_index"] = index
+            if index["sections"]:
+                section = index["sections"][0]
+                start, end = section["line_start"], section["line_end"]
+                full_excerpt = excerpt or "\n".join(lines[start - 1 : end])
+                item.update(line_start=start, line_end=end, excerpt=full_excerpt)
+            elif not lines:
+                item.update(line_start=0, line_end=0)
+            item["excerpt_truncated"] = len(item["excerpt"]) > 4000
+            item["excerpt"] = item["excerpt"][:4000]
         self.update("evidence.created", transform=lambda s: s["evidence"].append(item))
         return item
+
+    def select_log(self, artifact_id, budget=10000):
+        source = store.get_artifact(self.id, artifact_id)
+        selected = context_log(source["content"], budget)
+        identity = {"source_artifact_id": artifact_id, "budget_bytes": budget, **selected["selection"]}
+        archive = self.artifact(
+            "log_context", json.dumps(identity, ensure_ascii=False, indent=2) + "\n\n" + selected["text"]
+        )
+
+        def attach(snap):
+            for ev in snap["evidence"]:
+                if ev.get("log_index", {}).get("sha256") == source["sha256"]:
+                    ev.setdefault("log_context_artifact_ids", []).append(archive["id"])
+
+        self.update(
+            "log.context_selected",
+            {"message": "已按原始行号归档模型使用的日志片段与省略范围"},
+            transform=attach,
+        )
+        selected["selection"]["context_artifact_id"] = archive["id"]
+        return selected
 
     async def check(self, case_id, check_id, patch=""):
         self.guard()
@@ -470,7 +505,7 @@ class Context:
             shutil.rmtree(self.workspace, ignore_errors=True)
 
 
-def build_materials(ctx, case_id, logs):
+def build_materials(ctx, case_id, outputs):
     source = []
     for path in sorted((ctx.source_root(case_id) / "src").rglob("*.py")):
         raw = path.read_text()
@@ -485,10 +520,25 @@ def build_materials(ctx, case_id, logs):
                 "redacted": text != raw,
             }
         )
+    contexts = []
+    selections = []
+    for execution in outputs:
+        artifact = store.get_artifact(ctx.id, execution["stdout_artifact_id"])
+        selected = ctx.select_log(artifact["id"], budget=5000)
+        contexts.append(selected["text"])
+        selections.append(
+            {
+                "artifact_id": artifact["id"],
+                "execution_id": execution["id"],
+                "check_id": execution["check_id"],
+                **selected["selection"],
+            }
+        )
     return {
         "goal": "修复固定快照中已复现的目标失败，保留所有既有测试行为",
         "source": source,
-        "logs": logs[-10000:],
+        "logs": "\n".join(contexts),
+        "log_selection": selections,
         "evidence": store.snapshot(ctx.id)["evidence"],
     }
 
@@ -536,7 +586,7 @@ async def run_demo(ctx):
 async def run_registered(ctx, case_id, case):
     ctx.phase("reproduce", "在原始快照执行目标测试与基线回归")
     target, target_log = await ctx.check(case_id, "target")
-    regression, regression_log = await ctx.check(case_id, "regression")
+    regression, _ = await ctx.check(case_id, "regression")
     ctx.evidence("baseline_log", target_log)
     reproduced = (
         target.get("exit_code") in {1, 2}
@@ -559,7 +609,7 @@ async def run_registered(ctx, case_id, case):
         from .evaluation_execution import attach_log
 
         attach_log(ctx)
-    materials = build_materials(ctx, case_id, target_log + "\n" + regression_log)
+    materials = build_materials(ctx, case_id, [target, regression])
     if ctx.body["mode"] == "adaptive":
         from .adaptive import run_adaptive
 
@@ -623,7 +673,7 @@ async def run_registered(ctx, case_id, case):
                 continue
             return "unresolved", "补丁未通过平台范围与上下文校验"
         ctx.phase("validate", "独立执行候选补丁的目标测试和完整回归")
-        result, output = await validate(ctx, case_id, candidate, [target, regression], kind="candidate")
+        result, _ = await validate(ctx, case_id, candidate, [target, regression], kind="candidate")
         ctx.update(
             "rollout.finished",
             transform=lambda s, status=result["status"]: s["rollouts"][-1].update(
@@ -646,7 +696,12 @@ async def run_registered(ctx, case_id, case):
                 else ("unresolved", "最终独立验证失败，不能判定修复成功")
             )
         materials["previous_patch"] = patch_text
-        materials["validation_feedback"] = {"reasons": result["reasons"], "output": output[-6000:]}
+        selected_feedback = ctx.select_log(result["regression"]["stdout_artifact_id"], budget=6000)
+        materials["validation_feedback"] = {
+            "reasons": result["reasons"],
+            "output": selected_feedback["text"],
+            "log_selection": selected_feedback["selection"],
+        }
         if attempt == 0:
             ctx.phase("refine", "依据真实失败结果进行一次补丁修正")
     return "unresolved", "候选补丁未通过独立检查，已保留证据与验证记录"
@@ -682,7 +737,7 @@ async def run_github(ctx):
         await github.close()
     if not log.strip():
         raise Blocked("未获得可用日志，无法作出有证据的诊断")
-    ctx.evidence("ci_log", log)
+    evidence = ctx.evidence("ci_log", log)
     if ctx.snap.get("runner_profile"):
         ctx.phase("preflight", "准备固定 GitHub SHA 的只读源码与登记环境")
         health = await ctx.guarded(ctx.runner.health())
@@ -695,8 +750,15 @@ async def run_github(ctx):
     ctx.phase("diagnose", "仓库未登记执行环境，仅分析已固定的失败日志")
     if not settings().model_ready:
         raise Blocked("日志已读取，但未配置模型服务；仓库也尚未登记复现环境")
+    artifact = store.get_artifact(ctx.id, evidence["artifact_id"])
+    selected_log = ctx.select_log(artifact["id"])
     diagnosis = await ctx.diagnose(
-        {"mode": "logs_only", "log": log[-10000:], "evidence": store.snapshot(ctx.id)["evidence"]}
+        {
+            "mode": "logs_only",
+            "log": selected_log["text"],
+            "log_selection": {"artifact_id": artifact["id"], **selected_log["selection"]},
+            "evidence": store.snapshot(ctx.id)["evidence"],
+        }
     )
     if diagnosis.patch or diagnosis.edits or diagnosis.root_cause.certainty == "supported":
         raise AppError("model_scope_error", "日志诊断输出超出登记能力边界", 502)

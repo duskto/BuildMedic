@@ -2493,6 +2493,34 @@ button.mode-card:disabled {
   display: table-cell;
   white-space: nowrap;
 }
+.log-viewer {
+  min-width: 0;
+  max-width: 100%;
+}
+.log-section-links {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+}
+.log-section-links button {
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.log-section-links small {
+  display: block;
+}
+.log-jump {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+}
+.log-jump input {
+  width: 100px;
+}
 @media (max-width: 600px) {
   .experience-section {
     padding: 16px;

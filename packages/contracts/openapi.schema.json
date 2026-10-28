@@ -1170,6 +1170,89 @@
         }
       }
     },
+    "/api/v1/tasks/{tid}/artifacts/{aid}/lines": {
+      "get": {
+        "summary": "Get Log Lines",
+        "operationId": "get_log_lines_api_v1_tasks__tid__artifacts__aid__lines_get",
+        "parameters": [
+          {
+            "name": "tid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tid"
+            }
+          },
+          {
+            "name": "aid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Aid"
+            }
+          },
+          {
+            "name": "start_line",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Start Line"
+            }
+          },
+          {
+            "name": "start_column",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 2000000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Start Column"
+            }
+          },
+          {
+            "name": "max_lines",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 100,
+              "title": "Max Lines"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_LogWindow_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tasks/{tid}/artifacts/{aid}": {
       "get": {
         "summary": "Get Artifact",
@@ -1406,6 +1489,23 @@
           "request_id"
         ],
         "title": "Envelope[EvaluationAnalysis]"
+      },
+      "Envelope_LogWindow_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/LogWindow"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "request_id"
+        ],
+        "title": "Envelope[LogWindow]"
       },
       "Envelope_TaskPage_": {
         "properties": {
@@ -1727,6 +1827,91 @@
         "additionalProperties": false,
         "type": "object",
         "title": "Limits"
+      },
+      "LogLine": {
+        "properties": {
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "column": {
+            "type": "integer",
+            "title": "Column"
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "number",
+          "content",
+          "column",
+          "complete"
+        ],
+        "title": "LogLine"
+      },
+      "LogWindow": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "title": "Artifact Id"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "total_lines": {
+            "type": "integer",
+            "title": "Total Lines"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/LogLine"
+            },
+            "type": "array",
+            "title": "Lines"
+          },
+          "next_line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Line"
+          },
+          "next_column": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Column"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "artifact_id",
+          "sha256",
+          "total_lines",
+          "lines",
+          "next_line",
+          "next_column"
+        ],
+        "title": "LogWindow"
       },
       "PairedResult": {
         "properties": {
