@@ -5,6 +5,7 @@ import { z } from "zod";
 import { api } from "./api";
 import { healthSchema } from "./contracts";
 import { IndependentScore } from "./IndependentScore";
+import { EvaluationAnalysis } from "./EvaluationAnalysis";
 
 const summarySchema = z.object({
   mode: z.enum(["logs", "standard", "multi", "adaptive"]),
@@ -515,6 +516,7 @@ export function ExperimentDetail() {
           </p>
         ))}
       </section>
+      <EvaluationAnalysis id={item.id} sourceHash={item.report_sha256} />
       <section className="panel padded">
         <h2>逐项执行证据</h2>
         <div className="table-scroll">

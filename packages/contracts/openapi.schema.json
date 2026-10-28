@@ -515,6 +515,82 @@
         }
       }
     },
+    "/api/v1/experiments/{eid}/analysis": {
+      "get": {
+        "summary": "Experiment Analysis",
+        "operationId": "experiment_analysis_api_v1_experiments__eid__analysis_get",
+        "parameters": [
+          {
+            "name": "eid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Eid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_EvaluationAnalysis_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiments/{eid}/analysis/report": {
+      "get": {
+        "summary": "Experiment Analysis Report",
+        "operationId": "experiment_analysis_report_api_v1_experiments__eid__analysis_report_get",
+        "parameters": [
+          {
+            "name": "eid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Eid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/experiments/{eid}/score": {
       "post": {
         "summary": "Start Experiment Score",
@@ -1252,6 +1328,85 @@
         ],
         "title": "CreateTask"
       },
+      "Distribution": {
+        "properties": {
+          "n": {
+            "type": "integer",
+            "title": "N"
+          },
+          "mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "sample_stddev": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Stddev"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "n",
+          "mean",
+          "minimum",
+          "maximum",
+          "sample_stddev"
+        ],
+        "title": "Distribution"
+      },
+      "Envelope_EvaluationAnalysis_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EvaluationAnalysis"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "request_id"
+        ],
+        "title": "Envelope[EvaluationAnalysis]"
+      },
       "Envelope_TaskPage_": {
         "properties": {
           "data": {
@@ -1285,6 +1440,85 @@
           "request_id"
         ],
         "title": "Envelope[TaskSnapshot]"
+      },
+      "EvaluationAnalysis": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "1.0",
+            "title": "Schema Version",
+            "default": "1.0"
+          },
+          "experiment_id": {
+            "type": "string",
+            "title": "Experiment Id"
+          },
+          "source_report_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Report Sha256"
+          },
+          "scope": {
+            "type": "string",
+            "const": "public-development-descriptive",
+            "title": "Scope",
+            "default": "public-development-descriptive"
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete"
+          },
+          "environment_consistent": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Consistent"
+          },
+          "repeat_results": {
+            "items": {
+              "$ref": "#/components/schemas/RepeatResult"
+            },
+            "type": "array",
+            "title": "Repeat Results"
+          },
+          "variation": {
+            "items": {
+              "$ref": "#/components/schemas/RepeatVariation"
+            },
+            "type": "array",
+            "title": "Variation"
+          },
+          "pairs": {
+            "items": {
+              "$ref": "#/components/schemas/PairedResult"
+            },
+            "type": "array",
+            "title": "Pairs"
+          },
+          "analysis_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Analysis Sha256"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "experiment_id",
+          "source_report_sha256",
+          "complete",
+          "environment_consistent",
+          "repeat_results",
+          "variation",
+          "pairs",
+          "analysis_sha256"
+        ],
+        "title": "EvaluationAnalysis"
       },
       "EvaluationCase": {
         "properties": {
@@ -1494,6 +1728,126 @@
         "type": "object",
         "title": "Limits"
       },
+      "PairedResult": {
+        "properties": {
+          "reference": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "multi",
+              "adaptive"
+            ],
+            "title": "Reference"
+          },
+          "compared": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "multi",
+              "adaptive"
+            ],
+            "title": "Compared"
+          },
+          "planned": {
+            "type": "integer",
+            "title": "Planned"
+          },
+          "paired": {
+            "type": "integer",
+            "title": "Paired"
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending"
+          },
+          "compared_only": {
+            "type": "integer",
+            "title": "Compared Only"
+          },
+          "reference_only": {
+            "type": "integer",
+            "title": "Reference Only"
+          },
+          "both_verified": {
+            "type": "integer",
+            "title": "Both Verified"
+          },
+          "neither_verified": {
+            "type": "integer",
+            "title": "Neither Verified"
+          },
+          "public_rate_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Rate Delta"
+          },
+          "calls_delta": {
+            "type": "integer",
+            "title": "Calls Delta"
+          },
+          "tokens_delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens Delta"
+          },
+          "unknown_usage_pairs": {
+            "type": "integer",
+            "title": "Unknown Usage Pairs"
+          },
+          "wall_seconds_delta": {
+            "type": "number",
+            "title": "Wall Seconds Delta"
+          },
+          "cost_usd_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd Delta"
+          },
+          "unknown_cost_pairs": {
+            "type": "integer",
+            "title": "Unknown Cost Pairs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reference",
+          "compared",
+          "planned",
+          "paired",
+          "pending",
+          "compared_only",
+          "reference_only",
+          "both_verified",
+          "neither_verified",
+          "public_rate_delta",
+          "calls_delta",
+          "tokens_delta",
+          "unknown_usage_pairs",
+          "wall_seconds_delta",
+          "cost_usd_delta",
+          "unknown_cost_pairs"
+        ],
+        "title": "PairedResult"
+      },
       "Preview": {
         "properties": {
           "run_url": {
@@ -1547,6 +1901,145 @@
           "snapshot_sha256"
         ],
         "title": "RemoteSnapshot"
+      },
+      "RepeatResult": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "multi",
+              "adaptive"
+            ],
+            "title": "Mode"
+          },
+          "repeat": {
+            "type": "integer",
+            "title": "Repeat"
+          },
+          "planned": {
+            "type": "integer",
+            "title": "Planned"
+          },
+          "finished": {
+            "type": "integer",
+            "title": "Finished"
+          },
+          "public_verified": {
+            "type": "integer",
+            "title": "Public Verified"
+          },
+          "public_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Rate"
+          },
+          "calls": {
+            "type": "integer",
+            "title": "Calls"
+          },
+          "tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens"
+          },
+          "unknown_usage": {
+            "type": "integer",
+            "title": "Unknown Usage"
+          },
+          "wall_seconds": {
+            "type": "number",
+            "title": "Wall Seconds"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mode",
+          "repeat",
+          "planned",
+          "finished",
+          "public_verified",
+          "public_rate",
+          "calls",
+          "tokens",
+          "unknown_usage",
+          "wall_seconds",
+          "cost_usd"
+        ],
+        "title": "RepeatResult"
+      },
+      "RepeatVariation": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "multi",
+              "adaptive"
+            ],
+            "title": "Mode"
+          },
+          "planned_repeats": {
+            "type": "integer",
+            "title": "Planned Repeats"
+          },
+          "complete_repeats": {
+            "type": "integer",
+            "title": "Complete Repeats"
+          },
+          "public_rate": {
+            "$ref": "#/components/schemas/Distribution"
+          },
+          "calls": {
+            "$ref": "#/components/schemas/Distribution"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/Distribution"
+          },
+          "wall_seconds": {
+            "$ref": "#/components/schemas/Distribution"
+          },
+          "cost_usd": {
+            "$ref": "#/components/schemas/Distribution"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mode",
+          "planned_repeats",
+          "complete_repeats",
+          "public_rate",
+          "calls",
+          "tokens",
+          "wall_seconds",
+          "cost_usd"
+        ],
+        "title": "RepeatVariation"
       },
       "Source": {
         "properties": {

@@ -85,6 +85,22 @@ test("comparison: persisted real API results match the browser and remain privat
       ).json()
     ).report_sha256,
   ).toBe(report.report_sha256);
+  const analysis = (
+    await (
+      await page.request.get(`/api/v1/experiments/${report.id}/analysis`)
+    ).json()
+  ).data;
+  expect(analysis.source_report_sha256).toBe(report.report_sha256);
+  expect(analysis.complete).toBe(true);
+  await expect(page.getByRole("heading", { name: "同案例配对" })).toBeVisible();
+  await expect(page.getByText(/至少需两轮完整记录/)).toHaveCount(
+    analysis.variation.filter((v: any) => v.public_rate.n < 2).length,
+  );
+  const analysisExport = await page.request.get(
+    `/api/v1/experiments/${report.id}/analysis/report`,
+  );
+  expect(analysisExport.status()).toBe(200);
+  expect((await analysisExport.json()).analysis).toEqual(analysis);
   await page.screenshot({
     path: resolve(root, `${prefix}.png`),
     fullPage: true,
@@ -107,6 +123,14 @@ test("comparison: persisted real API results match the browser and remain privat
       await other.request.get(`${baseURL}/api/v1/experiments/${report.id}`)
     ).status(),
   ).toBe(404);
+  for (const suffix of ["/analysis", "/analysis/report"])
+    expect(
+      (
+        await other.request.get(
+          `${baseURL}/api/v1/experiments/${report.id}${suffix}`,
+        )
+      ).status(),
+    ).toBe(404);
   await other.close();
   for (const row of report.rows.filter((r: any) => r.mode === "logs")) {
     const task = (

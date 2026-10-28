@@ -2482,6 +2482,17 @@ button.mode-card:disabled {
 .experience-section details {
   margin: 20px 0;
 }
+.analysis-table {
+  min-width: 640px;
+}
+.analysis-pairs {
+  min-width: 960px;
+}
+.analysis-table th,
+.analysis-table td {
+  display: table-cell;
+  white-space: nowrap;
+}
 @media (max-width: 600px) {
   .experience-section {
     padding: 16px;

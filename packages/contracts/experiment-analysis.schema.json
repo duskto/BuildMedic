@@ -1,0 +1,402 @@
+{
+  "$defs": {
+    "Distribution": {
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "title": "N",
+          "type": "integer"
+        },
+        "mean": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mean"
+        },
+        "minimum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Minimum"
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Maximum"
+        },
+        "sample_stddev": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sample Stddev"
+        }
+      },
+      "required": [
+        "n",
+        "mean",
+        "minimum",
+        "maximum",
+        "sample_stddev"
+      ],
+      "title": "Distribution",
+      "type": "object"
+    },
+    "PairedResult": {
+      "additionalProperties": false,
+      "properties": {
+        "reference": {
+          "enum": [
+            "standard",
+            "multi",
+            "adaptive"
+          ],
+          "title": "Reference",
+          "type": "string"
+        },
+        "compared": {
+          "enum": [
+            "standard",
+            "multi",
+            "adaptive"
+          ],
+          "title": "Compared",
+          "type": "string"
+        },
+        "planned": {
+          "title": "Planned",
+          "type": "integer"
+        },
+        "paired": {
+          "title": "Paired",
+          "type": "integer"
+        },
+        "pending": {
+          "title": "Pending",
+          "type": "integer"
+        },
+        "compared_only": {
+          "title": "Compared Only",
+          "type": "integer"
+        },
+        "reference_only": {
+          "title": "Reference Only",
+          "type": "integer"
+        },
+        "both_verified": {
+          "title": "Both Verified",
+          "type": "integer"
+        },
+        "neither_verified": {
+          "title": "Neither Verified",
+          "type": "integer"
+        },
+        "public_rate_delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Public Rate Delta"
+        },
+        "calls_delta": {
+          "title": "Calls Delta",
+          "type": "integer"
+        },
+        "tokens_delta": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Tokens Delta"
+        },
+        "unknown_usage_pairs": {
+          "title": "Unknown Usage Pairs",
+          "type": "integer"
+        },
+        "wall_seconds_delta": {
+          "title": "Wall Seconds Delta",
+          "type": "number"
+        },
+        "cost_usd_delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cost Usd Delta"
+        },
+        "unknown_cost_pairs": {
+          "title": "Unknown Cost Pairs",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "reference",
+        "compared",
+        "planned",
+        "paired",
+        "pending",
+        "compared_only",
+        "reference_only",
+        "both_verified",
+        "neither_verified",
+        "public_rate_delta",
+        "calls_delta",
+        "tokens_delta",
+        "unknown_usage_pairs",
+        "wall_seconds_delta",
+        "cost_usd_delta",
+        "unknown_cost_pairs"
+      ],
+      "title": "PairedResult",
+      "type": "object"
+    },
+    "RepeatResult": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "standard",
+            "multi",
+            "adaptive"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "repeat": {
+          "title": "Repeat",
+          "type": "integer"
+        },
+        "planned": {
+          "title": "Planned",
+          "type": "integer"
+        },
+        "finished": {
+          "title": "Finished",
+          "type": "integer"
+        },
+        "public_verified": {
+          "title": "Public Verified",
+          "type": "integer"
+        },
+        "public_rate": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Public Rate"
+        },
+        "calls": {
+          "title": "Calls",
+          "type": "integer"
+        },
+        "tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Tokens"
+        },
+        "unknown_usage": {
+          "title": "Unknown Usage",
+          "type": "integer"
+        },
+        "wall_seconds": {
+          "title": "Wall Seconds",
+          "type": "number"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cost Usd"
+        }
+      },
+      "required": [
+        "mode",
+        "repeat",
+        "planned",
+        "finished",
+        "public_verified",
+        "public_rate",
+        "calls",
+        "tokens",
+        "unknown_usage",
+        "wall_seconds",
+        "cost_usd"
+      ],
+      "title": "RepeatResult",
+      "type": "object"
+    },
+    "RepeatVariation": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "standard",
+            "multi",
+            "adaptive"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "planned_repeats": {
+          "title": "Planned Repeats",
+          "type": "integer"
+        },
+        "complete_repeats": {
+          "title": "Complete Repeats",
+          "type": "integer"
+        },
+        "public_rate": {
+          "$ref": "#/$defs/Distribution"
+        },
+        "calls": {
+          "$ref": "#/$defs/Distribution"
+        },
+        "tokens": {
+          "$ref": "#/$defs/Distribution"
+        },
+        "wall_seconds": {
+          "$ref": "#/$defs/Distribution"
+        },
+        "cost_usd": {
+          "$ref": "#/$defs/Distribution"
+        }
+      },
+      "required": [
+        "mode",
+        "planned_repeats",
+        "complete_repeats",
+        "public_rate",
+        "calls",
+        "tokens",
+        "wall_seconds",
+        "cost_usd"
+      ],
+      "title": "RepeatVariation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "experiment_id": {
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "source_report_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Source Report Sha256",
+      "type": "string"
+    },
+    "scope": {
+      "const": "public-development-descriptive",
+      "default": "public-development-descriptive",
+      "title": "Scope",
+      "type": "string"
+    },
+    "complete": {
+      "title": "Complete",
+      "type": "boolean"
+    },
+    "environment_consistent": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Environment Consistent"
+    },
+    "repeat_results": {
+      "items": {
+        "$ref": "#/$defs/RepeatResult"
+      },
+      "title": "Repeat Results",
+      "type": "array"
+    },
+    "variation": {
+      "items": {
+        "$ref": "#/$defs/RepeatVariation"
+      },
+      "title": "Variation",
+      "type": "array"
+    },
+    "pairs": {
+      "items": {
+        "$ref": "#/$defs/PairedResult"
+      },
+      "title": "Pairs",
+      "type": "array"
+    },
+    "analysis_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Analysis Sha256",
+      "type": "string"
+    }
+  },
+  "required": [
+    "experiment_id",
+    "source_report_sha256",
+    "complete",
+    "environment_consistent",
+    "repeat_results",
+    "variation",
+    "pairs",
+    "analysis_sha256"
+  ],
+  "title": "EvaluationAnalysis",
+  "type": "object"
+}

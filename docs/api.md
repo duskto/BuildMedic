@@ -29,6 +29,8 @@ API 根路径为 `/api/v1`。成功返回 `{data, request_id}`，错误返回 `{
 | POST | `/experiments/{id}/advance` | 返回当前任务或原子安排下一项；可安全重复 |
 | POST | `/experiments/{id}/cancel` | 停止后续安排并取消当前任务 |
 | GET | `/experiments/{id}/report` | 下载含冻结输入的离线复算证据包 |
+| GET | `/experiments/{id}/analysis` | 重复轮次与同案例配对的描述统计，绑定来源报告 hash |
+| GET | `/experiments/{id}/analysis/report` | 下载独立分析及来源证据包；不修改公开报告与评分回执 |
 | POST / GET | `/experiments/{id}/score` | 启动 / 查询整批完成后的独立评分，不接收请求体 |
 | GET | `/experiments/{id}/score/report` | 下载经服务端验证的评分回执，检查会话归属 |
 

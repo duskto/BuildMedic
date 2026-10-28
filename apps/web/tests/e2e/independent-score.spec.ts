@@ -122,8 +122,16 @@ test("private behavior failures are separate from public results and scoring cre
         expect(route.request().postData()).toBeNull();
         data = score;
       } else data = null;
-    } else if (path === "/api/v1/experiments/owned-experiment")
-      data = experiment;
+    } else if (path.endsWith("/analysis"))
+      data = {
+        source_report_sha256: experiment.report_sha256,
+        complete: true,
+        environment_consistent: true,
+        repeat_results: [],
+        variation: [],
+        pairs: [],
+      };
+    else if (path === "/api/v1/experiments/owned-experiment") data = experiment;
     else {
       await route.fulfill({
         status: 404,

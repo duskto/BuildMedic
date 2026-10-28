@@ -79,13 +79,174 @@ const report = {
   })),
 };
 
+const emptyAnalysis = {
+  source_report_sha256: report.report_sha256,
+  complete: true,
+  environment_consistent: true,
+  repeat_results: [],
+  variation: [],
+  pairs: [],
+};
+
+for (const partial of [false, true]) {
+  test(`descriptive analysis keeps ${partial ? "pending pairs" : "unknown usage and single-repeat variance"} explicit`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    const stats = {
+      n: 1,
+      mean: 1,
+      minimum: 1,
+      maximum: 1,
+      sample_stddev: null,
+    };
+    const analysis = {
+      ...emptyAnalysis,
+      complete: !partial,
+      repeat_results: [
+        {
+          mode: "standard",
+          repeat: 1,
+          planned: 1,
+          finished: 1,
+          public_verified: 1,
+          public_rate: 1,
+          calls: 1,
+          tokens: 1000,
+          wall_seconds: 10,
+        },
+      ],
+      variation: [
+        {
+          mode: "standard",
+          planned_repeats: 1,
+          complete_repeats: 1,
+          public_rate: stats,
+          tokens: { ...stats, mean: 1000 },
+        },
+      ],
+      pairs: [
+        {
+          reference: "standard",
+          compared: "adaptive",
+          planned: 1,
+          paired: partial ? 0 : 1,
+          pending: partial ? 1 : 0,
+          compared_only: 0,
+          reference_only: partial ? 0 : 1,
+          both_verified: 0,
+          neither_verified: 0,
+          public_rate_delta: partial ? null : -1,
+          calls_delta: 6,
+          tokens_delta: null,
+          unknown_usage_pairs: 1,
+          wall_seconds_delta: 50,
+          cost_usd_delta: null,
+          unknown_cost_pairs: 1,
+        },
+      ],
+    };
+    await page.route("**/api/v1/experiments/**", (route) =>
+      route.fulfill({
+        json: {
+          request_id: "fixture",
+          data: route.request().url().endsWith("/analysis")
+            ? analysis
+            : route.request().url().endsWith("/score")
+              ? null
+              : report,
+        },
+      }),
+    );
+    await page.goto("/experiments/comparison-fixture");
+    const panel = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "重复运行与配对比较" }),
+    });
+    await expect(panel.getByText(/至少需两轮完整记录/)).toBeVisible();
+    await expect(
+      panel.getByRole("cell", { name: "固定策略 → Harness²", exact: true }),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole("cell", {
+        name: partial ? "待完整配对" : "-100.0 个百分点",
+        exact: true,
+      }),
+    ).toBeVisible();
+    if (partial)
+      await expect(panel.getByText(/本批尚未完整结束/)).toBeVisible();
+    else
+      await expect(
+        panel.getByRole("cell", { name: "+6 / 未知", exact: true }),
+      ).toBeVisible();
+    await expect(
+      panel.getByRole("link", { name: "下载可复算分析" }),
+    ).toHaveAttribute(
+      "href",
+      "/api/v1/experiments/comparison-fixture/analysis/report",
+    );
+    await expect(panel.getByRole("alert")).toHaveCount(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(
+      panel.getByRole("columnheader", { name: "公开通过", exact: true }),
+    ).toBeVisible();
+    const scroll = panel.getByRole("region", {
+      name: "同案例配对表格，可横向滚动",
+    });
+    expect(await scroll.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
+      true,
+    );
+    await scroll.scrollIntoViewIfNeeded();
+    await scroll.evaluate((el) => {
+      el.scrollLeft = el.scrollWidth;
+    });
+    await expect(
+      panel.getByRole("columnheader", { name: "耗时 / 费用差", exact: true }),
+    ).toBeInViewport();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    expect(errors).toEqual([]);
+  });
+}
+
+test("analysis from a different report snapshot waits instead of showing stale numbers", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/experiments/**", (route) =>
+    route.fulfill({
+      json: {
+        request_id: "fixture",
+        data: route.request().url().endsWith("/analysis")
+          ? { ...emptyAnalysis, source_report_sha256: "e".repeat(64) }
+          : route.request().url().endsWith("/score")
+            ? null
+            : report,
+      },
+    }),
+  );
+  await page.goto("/experiments/comparison-fixture");
+  await expect(
+    page.getByText(/报告正在更新，等待下一次刷新后核对分析/),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "同案例配对" })).toHaveCount(
+    0,
+  );
+});
+
 test("comparison shows actual counts, missing usage and task evidence without hidden-score claims", async ({
   page,
 }) => {
   await page.route("**/api/v1/experiments/**", (route) =>
     route.fulfill({
       json: {
-        data: route.request().url().endsWith("/score") ? null : report,
+        data: route.request().url().endsWith("/score")
+          ? null
+          : route.request().url().endsWith("/analysis")
+            ? emptyAnalysis
+            : report,
         request_id: "fixture",
       },
     }),
@@ -121,6 +282,13 @@ test("registering a comparison pins source hashes and equal budgets before any e
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/score"))
       return route.fulfill({ json: { data: null, request_id: "fixture" } });
+    if (path.endsWith("/analysis"))
+      return route.fulfill({
+        json: {
+          data: { ...emptyAnalysis, complete: false },
+          request_id: "fixture",
+        },
+      });
     if (path.endsWith("/evaluation/cases"))
       return route.fulfill({
         json: {
@@ -251,7 +419,11 @@ test("four-arm view separates unscored log diagnoses from verified repairs", asy
   await page.route("**/api/v1/experiments/**", (route) =>
     route.fulfill({
       json: {
-        data: route.request().url().endsWith("/score") ? null : four,
+        data: route.request().url().endsWith("/score")
+          ? null
+          : route.request().url().endsWith("/analysis")
+            ? emptyAnalysis
+            : four,
         request_id: "fixture",
       },
     }),
