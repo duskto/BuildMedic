@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     model_provider: Literal["compatible", "deepseek"] = "compatible"
     model_thinking: Literal["enabled", "disabled"] = "disabled"
     github_token: str = ""
+    github_log_cache_enabled: bool = True
     scorer_url: str = ""
     scorer_token: str = ""
     scorer_suite_sha256: str = ""

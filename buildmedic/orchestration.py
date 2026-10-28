@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from . import db, store
 from .cases import CASES, case_dir, source_hash
+from .ci_logs import read_job_log
 from .clients import ModelClient, RunnerClient
 from .config import settings
 from .errors import AppError, Blocked, BudgetExceeded, Cancelled
@@ -202,7 +203,7 @@ class Context:
     def artifact(self, kind, text, **kwargs):
         return store.artifact(self.id, kind, text, self.token, **kwargs)
 
-    def evidence(self, kind, text, path=None, excerpt=None):
+    def evidence(self, kind, text, path=None, excerpt=None, log_origin=None):
         art = self.artifact(kind, text)
         cleaned = sanitize(text)
         lines = cleaned.splitlines()
@@ -228,6 +229,8 @@ class Context:
             "excerpt": excerpt or "\n".join(lines[at : at + 12]),
         }
         if kind in LOG_KINDS:
+            if log_origin:
+                item["log_origin"] = log_origin
             index = index_log(cleaned)
             item["log_index"] = index
             if index["sections"]:
@@ -732,12 +735,20 @@ async def run_github(ctx):
             )
             if not profile or profile.binding() != ctx.snap["runner_profile"]:
                 raise Blocked("所选 Run 的 workflow、Job 或登记 profile 已变化")
-        log = await ctx.guarded(github.logs(preview["repo"], source["job_id"]))
+        with db.transaction() as conn:
+            owner = store.row(conn, ctx.id)["owner_id"]
+        log, log_origin = await ctx.guarded(read_job_log(github, owner, preview, source["job_id"]))
     finally:
         await github.close()
     if not log.strip():
         raise Blocked("未获得可用日志，无法作出有证据的诊断")
-    evidence = ctx.evidence("ci_log", log)
+    origin_artifact = ctx.artifact(
+        "ci_log_origin",
+        json.dumps(log_origin, ensure_ascii=False, indent=2),
+        content_type="application/json",
+    )
+    log_origin["artifact_id"] = origin_artifact["id"]
+    evidence = ctx.evidence("ci_log", log, log_origin=log_origin)
     if ctx.snap.get("runner_profile"):
         ctx.phase("preflight", "准备固定 GitHub SHA 的只读源码与登记环境")
         health = await ctx.guarded(ctx.runner.health())

@@ -1,7 +1,11 @@
 """Read-only GitHub ingestion; caller input never becomes a download host."""
 
+import asyncio
 import json
+import math
 import re
+import time
+from email.utils import parsedate_to_datetime
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -12,6 +16,33 @@ from .profiles import match_profile, registry
 from .security import sanitize
 
 RUN_PATH = re.compile(r"^/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/actions/runs/([1-9][0-9]*)/?$")
+MAX_READ_ATTEMPTS = 3
+MAX_RETRY_WAIT = 2.0
+TRANSIENT_STATUSES = {500, 502, 503, 504}
+
+
+def retry_information(headers):
+    """Expose only parsed timing fields; never echo arbitrary upstream headers."""
+    now = time.time()
+    deadlines, details = [], {}
+    value = headers.get("retry-after", "")
+    if value and len(value) <= 128:
+        try:
+            delay = float(value) if value.isascii() and value.isdigit() else None
+            at = now + delay if delay is not None else parsedate_to_datetime(value).timestamp()
+            if math.isfinite(at) and at >= 0:
+                deadlines.append(max(now, min(at, 253402300799)))
+        except (ValueError, TypeError, OverflowError):
+            pass
+    value = headers.get("x-ratelimit-reset", "")
+    if value.isascii() and value.isdigit() and len(value) <= 12:
+        reset = int(value)
+        details["reset_at"] = str(reset)
+        if headers.get("x-ratelimit-remaining") == "0" and now < reset <= 253402300799:
+            deadlines.append(float(reset))
+    if deadlines:
+        details["retry_at"] = max(deadlines)
+    return details
 
 
 def parse_run_url(url):
@@ -35,7 +66,7 @@ def parse_run_url(url):
 
 
 class GitHubClient:
-    def __init__(self, transport=None):
+    def __init__(self, transport=None, download_transport=None):
         headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
         if settings().github_token:
             headers["Authorization"] = "Bearer " + settings().github_token
@@ -46,28 +77,54 @@ class GitHubClient:
             follow_redirects=False,
             transport=transport,
         )
+        self.download_transport = download_transport
 
     async def close(self):
         await self.client.aclose()
 
     def check(self, response):
+        timing = retry_information(response.headers)
         if response.status_code in (403, 429):
+            limited = (
+                response.status_code == 429
+                or response.headers.get("x-ratelimit-remaining") == "0"
+                or "retry_at" in timing
+            )
+            if limited and "retry_at" not in timing:
+                timing["retry_at"] = time.time() + 60
             raise AppError(
-                "github_rate_limited"
-                if response.status_code == 429 or response.headers.get("x-ratelimit-remaining") == "0"
-                else "github_forbidden",
-                "GitHub 限流或权限不足，请检查服务端凭据后重试",
+                "github_rate_limited" if limited else "github_forbidden",
+                "GitHub 已限流，请在允许重试时间之后重试"
+                if limited
+                else "GitHub 拒绝读取，请检查服务端凭据与 Actions 读取权限",
                 503,
-                True,
-                {
-                    "retry_after": response.headers.get("retry-after"),
-                    "reset_at": response.headers.get("x-ratelimit-reset"),
-                },
+                limited,
+                timing,
             )
         if response.status_code in (404, 410):
             raise AppError("github_unavailable", "运行记录或日志不可用，可能已过期或无读取权限", 404)
         if response.status_code >= 400:
-            raise AppError("github_error", "GitHub 返回错误，请稍后重试", 502, True)
+            raise AppError(
+                "github_error",
+                "GitHub 返回错误，请稍后重试",
+                502,
+                response.status_code in TRANSIENT_STATUSES,
+                {"http_status": response.status_code, **timing},
+            )
+
+    async def retry_read(self, operation):
+        """Retry complete idempotent reads, discarding partial bodies and expired links."""
+        for attempt in range(MAX_READ_ATTEMPTS):
+            try:
+                return await operation()
+            except httpx.RequestError:
+                error = AppError("github_connection", "无法连接 GitHub，请检查后端网络", 503, True)
+            except AppError as exc:
+                error = exc
+            delay = max(0.25 * 2**attempt, error.details.get("retry_at", 0) - time.time())
+            if not error.retryable or attempt == MAX_READ_ATTEMPTS - 1 or delay > MAX_RETRY_WAIT:
+                raise error from None
+            await asyncio.sleep(delay)
 
     async def read_limited(self, response, limit, code, message):
         chunks, size = [], 0
@@ -79,7 +136,7 @@ class GitHubClient:
         return b"".join(chunks)
 
     async def get(self, path, **kwargs):
-        try:
+        async def read():
             async with self.client.stream("GET", path, **kwargs) as response:
                 self.check(response)
                 if response.is_redirect:
@@ -91,8 +148,8 @@ class GitHubClient:
                     return json.loads(content)
                 except (ValueError, UnicodeDecodeError) as exc:
                     raise AppError("github_invalid_response", "GitHub 返回的元数据格式无效", 502) from exc
-        except httpx.RequestError as exc:
-            raise AppError("github_connection", "无法连接 GitHub，请检查后端网络", 503, True) from exc
+
+        return await self.retry_read(read)
 
     async def preview(self, url, fixed_attempt=None):
         repo, run_id, url_attempt = parse_run_url(url)
@@ -136,6 +193,7 @@ class GitHubClient:
                         {
                             "id": job["id"],
                             "name": sanitize(job["name"]),
+                            "status": job.get("status"),
                             "conclusion": job["conclusion"],
                             "execution_supported": profile is not None,
                             "profile_version": profile.id if profile else None,
@@ -166,32 +224,40 @@ class GitHubClient:
         }
 
     async def logs(self, repo, job_id):
-        try:
+        async def read():
             async with self.client.stream("GET", f"/repos/{repo}/actions/jobs/{job_id}/logs") as response:
                 self.check(response)
                 if not response.is_redirect:
                     content = await self.read_limited(response, 2_000_000, "log_too_large", "日志超过 2 MB")
                     return sanitize(content.decode("utf-8", errors="replace"))
                 location = response.headers.get("location", "")
-            parsed = urlparse(location)
-            host = parsed.hostname or ""
-            if (
-                parsed.scheme != "https"
-                or parsed.username
-                or parsed.password
-                or parsed.port not in (None, 443)
-                or not host.endswith((".blob.core.windows.net", ".actions.githubusercontent.com"))
-            ):
+            try:
+                parsed = urlparse(location)
+                host = parsed.hostname or ""
+                safe = (
+                    parsed.scheme == "https"
+                    and not parsed.username
+                    and not parsed.password
+                    and parsed.port in (None, 443)
+                    and host.endswith((".blob.core.windows.net", ".actions.githubusercontent.com"))
+                )
+            except ValueError:
+                safe = False
+            if not safe:
                 raise AppError("unsafe_log_redirect", "GitHub 日志下载域未通过校验", 502)
             # Separate client: never forward API credentials to the download host.
             async with (
-                httpx.AsyncClient(timeout=30, follow_redirects=False) as downloader,
+                httpx.AsyncClient(
+                    timeout=30, follow_redirects=False, transport=self.download_transport
+                ) as downloader,
                 downloader.stream("GET", location) as stream,
             ):
+                if stream.status_code in (401, 403):
+                    raise AppError("github_log_link_expired", "日志下载链接已失效，请重新读取", 503, True)
                 self.check(stream)
                 if stream.is_redirect:
                     raise AppError("unsafe_log_redirect", "日志发生额外重定向，已停止下载", 502)
                 content = await self.read_limited(stream, 2_000_000, "log_too_large", "日志超过 2 MB")
                 return sanitize(content.decode("utf-8", errors="replace"))
-        except httpx.RequestError as exc:
-            raise AppError("github_connection", "无法下载 GitHub 日志", 503, True) from exc
+
+        return await self.retry_read(read)

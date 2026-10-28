@@ -2,10 +2,17 @@ import { z } from "zod";
 export class ApiError extends Error {
   code: string;
   requestId?: string;
-  constructor(message: string, code: string, requestId?: string) {
+  retryAt?: number;
+  constructor(
+    message: string,
+    code: string,
+    requestId?: string,
+    retryAt?: number,
+  ) {
     super(message);
     this.code = code;
     this.requestId = requestId;
+    this.retryAt = retryAt;
   }
 }
 export async function api<T extends z.ZodTypeAny>(
@@ -35,7 +42,15 @@ export async function api<T extends z.ZodTypeAny>(
   if (!response.ok) {
     const parsed = z
       .object({
-        error: z.object({ message: z.string(), code: z.string() }),
+        error: z.object({
+          message: z.string(),
+          code: z.string(),
+          details: z
+            .object({
+              retry_at: z.number().finite().min(0).max(253402300799).optional(),
+            })
+            .optional(),
+        }),
         request_id: z.string(),
       })
       .safeParse(raw);
@@ -44,6 +59,7 @@ export async function api<T extends z.ZodTypeAny>(
           parsed.data.error.message,
           parsed.data.error.code,
           parsed.data.request_id,
+          parsed.data.error.details?.retry_at,
         )
       : new ApiError(`服务返回 HTTP ${response.status}`, "server_error");
   }

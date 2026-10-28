@@ -37,7 +37,7 @@ import {
   X,
 } from "lucide-react";
 import { z } from "zod";
-import { api, artifactUrl, readArtifact } from "./api";
+import { api, ApiError, artifactUrl, readArtifact } from "./api";
 import { AgentActions } from "./AgentActions";
 import { LogViewer } from "./LogViewer";
 import { Experiments, ExperimentDetail } from "./Experiments";
@@ -130,7 +130,15 @@ function ErrorBox({ error }: { error: unknown }) {
   return error ? (
     <div className="notice danger" role="alert">
       <TriangleAlert size={17} />
-      <span>{error instanceof Error ? error.message : "请求失败，请重试"}</span>
+      <span>
+        {error instanceof Error ? error.message : "请求失败，请重试"}
+        {error instanceof ApiError && error.retryAt !== undefined && (
+          <span className="small-note">
+            {" "}
+            可重试时间：{new Date(error.retryAt * 1000).toLocaleString("zh-CN")}
+          </span>
+        )}
+      </span>
     </div>
   ) : null;
 }
@@ -1789,6 +1797,32 @@ function EvidenceCard({
       <small>
         来源行号 L{e.line_start}–L{e.line_end}
       </small>
+      {e.log_origin && (
+        <p className="small-note">
+          日志来源：
+          {e.log_origin.source === "cache"
+            ? "复用本会话缓存"
+            : "本次从 GitHub 下载"}
+          {e.log_origin.cached_at != null && (
+            <>
+              ；缓存于{" "}
+              {new Date(e.log_origin.cached_at * 1000).toLocaleString("zh-CN")}
+            </>
+          )}
+          {e.log_origin.artifact_id && (
+            <>
+              {" "}
+              ·{" "}
+              <a
+                className="text-link"
+                href={artifactUrl(taskId, e.log_origin.artifact_id, true)}
+              >
+                下载来源记录
+              </a>
+            </>
+          )}
+        </p>
+      )}
       <pre className="log-excerpt">{e.excerpt}</pre>
       {e.log_context_artifact_ids?.map((aid, i) => (
         <p key={aid}>

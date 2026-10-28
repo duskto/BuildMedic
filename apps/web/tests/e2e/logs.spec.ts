@@ -97,6 +97,45 @@ function window(line: number) {
   };
 }
 
+for (const source of ["cache", "network"] as const) {
+  test(`CI log origin shows ${source} and a downloadable source record`, async ({
+    page,
+  }) => {
+    const fixture = task();
+    await page.route("**/api/v1/tasks/log-fixture", (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            ...fixture,
+            evidence: fixture.evidence.map((e) => ({
+              ...e,
+              log_origin: {
+                source,
+                cached_at: 1793150000,
+                expires_at: 1793236400,
+                artifact_id: "origin-artifact",
+              },
+            })),
+          },
+          request_id: "fixture",
+        },
+      }),
+    );
+    await page.goto("/tasks/log-fixture?tab=evidence");
+    await expect(
+      page.getByText(
+        source === "cache" ? /复用本会话缓存/ : /本次从 GitHub 下载/,
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "下载来源记录" }),
+    ).toHaveAttribute(
+      "href",
+      "/api/v1/tasks/log-fixture/artifacts/origin-artifact?download=true",
+    );
+  });
+}
+
 test("log navigation preserves original lines, jumps to failures and never fetches the whole artifact", async ({
   page,
 }) => {

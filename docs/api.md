@@ -45,6 +45,8 @@ GitHub source 必须同时包含 `run_url`、`run_attempt`、`job_id`。服务�
 
 GitHub URL 仅接受 `https://github.com/owner/repo/actions/runs/id`，可使用 `?attempt=2` 固定运行次数。下载仅跟随经过主机校验的官方日志重定向，并使用独立 HTTP client，避免把 API Authorization 透传给下载主机。
 
+GitHub GET 对暂时连接故障与 500 / 502 / 503 / 504 最多尝试三次；限流遵守服务端时间，超过 2 秒不自动等待，`error.details.retry_at` 为允许手动重试的 Unix 秒时间。Worker 重新核对公开仓库、固定 attempt / Job / SHA 后，才能复用当前会话的已完成日志；缓存最多 24 小时、20 项 / 会话、全局 200 项 / 32 MB。证据的可选 `log_origin` 和 `ci_log_origin` 产物记录下载或缓存来源及完整绑定，见 [GitHub 读取](github-ingestion.md)。
+
 日志证据可包含 `log_index`、`excerpt_truncated` 与 `log_context_artifact_ids`。失败窗口的行号、时间戳和步骤来自完整脱敏产物；模型节选另归档来源及省略范围。`/lines` 接受 `start_line`、`start_column` 和 `max_lines`，返回原行号、分段内容及下一页游标；超长行下一页可能仍是同一行。身份检查、限制和完整示例见[日志阅读](logs.md)。
 
 `lifecycle`、`phase`、`outcome` 和验证状态分别表达平台执行、业务阶段、结论及独立验收。`completed + unresolved` 是正常业务结束；`completed + repaired` 必须有原失败复现与最终独立检查证据。

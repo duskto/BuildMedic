@@ -140,6 +140,20 @@ experiment_scores = Table(
 )
 
 
+ci_log_cache = Table(
+    "ci_log_cache",
+    metadata,
+    Column("key", String(64), primary_key=True),
+    Column("owner_id", String(80), nullable=False, index=True),
+    Column("created_at", Float, nullable=False),
+    Column("expires_at", Float, nullable=False, index=True),
+    Column("binding", JSON, nullable=False),
+    Column("sha256", String(64), nullable=False),
+    Column("size_bytes", Integer, nullable=False),
+    Column("content", Text, nullable=False),
+)
+
+
 def make_engine(url=None):
     settings().data_dir.mkdir(parents=True, exist_ok=True)
     url = url or settings().database_url

@@ -93,6 +93,49 @@ test("task creation sends fixed case, server limits and idempotency key", async 
   await expect(page.getByRole("radio", { name: /分页边界错误/ })).toBeChecked();
 });
 
+test("GitHub rate limits show a retry time and preserve the Run URL", async ({
+  page,
+}) => {
+  let requests = 0;
+  await page.route("**/api/v1/ci/preview", (route) => {
+    requests++;
+    return route.fulfill({
+      status: 503,
+      json: {
+        error:
+          requests === 1
+            ? {
+                code: "github_rate_limited",
+                message: "GitHub 已限流，请在允许重试时间之后重试",
+                retryable: true,
+                details: { retry_at: 2000000000 },
+              }
+            : {
+                code: "github_unavailable",
+                message: "运行记录不可用",
+                retryable: false,
+                details: {},
+              },
+        request_id: "rate-limit-fixture",
+      },
+    });
+  });
+  await page.goto("/tasks/new");
+  await page
+    .getByRole("button", { name: "GitHub Actions", exact: true })
+    .click();
+  const url = "https://github.com/owner/repo/actions/runs/42?attempt=2";
+  await page.getByLabel("Actions Run URL").fill(url);
+  await page.getByRole("button", { name: "读取运行记录" }).click();
+  await expect(page.getByRole("alert")).toContainText("可重试时间：");
+  await expect(page.getByLabel("Actions Run URL")).toHaveValue(url);
+  expect(requests).toBe(1);
+  await page.getByRole("button", { name: "读取运行记录" }).click();
+  await expect(page.getByRole("alert")).toContainText("运行记录不可用");
+  await expect(page.getByText("可重试时间：")).toHaveCount(0);
+  expect(requests).toBe(2);
+});
+
 test("mobile navigation opens and can reach task history", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");

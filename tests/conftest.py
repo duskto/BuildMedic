@@ -18,6 +18,8 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "model_thinking", "disabled")
     monkeypatch.setattr(cfg, "adaptive_enabled", False)
     monkeypatch.setattr(cfg, "runner_profiles", None)
+    monkeypatch.setattr(cfg, "github_token", "")
+    monkeypatch.setattr(cfg, "github_log_cache_enabled", True)
     monkeypatch.setattr(cfg, "scorer_url", "")
     monkeypatch.setattr(cfg, "scorer_token", "")
     monkeypatch.setattr(cfg, "scorer_suite_sha256", "")

@@ -168,6 +168,14 @@ export const evidenceSchema = z.object({
   excerpt_truncated: z.boolean().optional(),
   log_index: logIndexSchema.optional(),
   log_context_artifact_ids: z.array(z.string()).optional(),
+  log_origin: z
+    .object({
+      source: z.enum(["network", "cache"]),
+      cached_at: z.number().nullable(),
+      expires_at: z.number().nullable(),
+      artifact_id: z.string().optional(),
+    })
+    .optional(),
 });
 export const experienceVersionSchema = z.object({
   id: z.string(),
