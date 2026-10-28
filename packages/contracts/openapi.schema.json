@@ -267,7 +267,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExperimentSpec"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ExperimentSpec"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FourArmSpec"
+                  }
+                ],
+                "title": "Body"
               }
             }
           }
@@ -337,6 +345,22 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluation/cases": {
+      "get": {
+        "summary": "Evaluation Cases",
+        "operationId": "evaluation_cases_api_v1_evaluation_cases_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }
@@ -1230,6 +1254,96 @@
         ],
         "title": "ExperimentSpec"
       },
+      "FourArmCase": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "enum": [
+              "pagination",
+              "imports",
+              "signature"
+            ],
+            "title": "Case Id"
+          },
+          "snapshot_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Snapshot Sha256"
+          },
+          "log_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Log Sha256"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "case_id",
+          "snapshot_sha256",
+          "log_sha256"
+        ],
+        "title": "FourArmCase"
+      },
+      "FourArmSpec": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "2.0",
+            "title": "Schema Version"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9 _.:-]{0,79}$",
+            "title": "Name"
+          },
+          "dataset": {
+            "type": "string",
+            "const": "public-development",
+            "title": "Dataset",
+            "default": "public-development"
+          },
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/FourArmCase"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Cases"
+          },
+          "repeats": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Repeats",
+            "default": 1
+          },
+          "agent_tools": {
+            "type": "boolean",
+            "title": "Agent Tools",
+            "default": false
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
+          },
+          "multi_attempts": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 2.0,
+            "title": "Multi Attempts",
+            "default": 4
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "name",
+          "cases"
+        ],
+        "title": "FourArmSpec"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1566,6 +1680,18 @@
             "title": "Agent Tools",
             "default": false
           },
+          "experiment_binding": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experiment Binding"
+          },
           "lifecycle": {
             "type": "string",
             "enum": [
@@ -1642,7 +1768,8 @@
             "enum": [
               "reproduced",
               "not_reproduced",
-              "blocked"
+              "blocked",
+              "not_run"
             ],
             "title": "Reproduction Status"
           },

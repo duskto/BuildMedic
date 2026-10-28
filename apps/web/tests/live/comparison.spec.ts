@@ -10,7 +10,11 @@ test("comparison: persisted real API results match the browser and remain privat
   baseURL,
 }) => {
   const root = resolve(process.cwd(), "../../var/acceptance");
-  const sessionFile = resolve(root, "evaluation-session.json");
+  const prefix = process.env.BUILDMEDIC_COMPARISON_PREFIX ?? "evaluation";
+  const sessionFile = resolve(
+    root,
+    process.env.BUILDMEDIC_COMPARISON_STATE ?? "evaluation-session.json",
+  );
   test.skip(
     process.env.BUILDMEDIC_LIVE !== "1" || !existsSync(sessionFile),
     "Requires an existing CLI comparison session; creates no paid tasks.",
@@ -50,19 +54,24 @@ test("comparison: persisted real API results match the browser and remain privat
     page.getByText(`已完成 · 已归档 ${report.finished} / ${report.planned} 项`),
   ).toBeVisible();
   for (const summary of report.summary) {
-    const row = page
-      .getByRole("row")
-      .filter({
-        has: page.getByRole("cell", {
-          name: new RegExp(
-            summary.mode === "standard"
-              ? "固定策略.*已归档"
-              : "Harness².*已归档",
-          ),
-        }),
-      });
+    const row = page.getByRole("row").filter({
+      has: page.getByRole("cell", {
+        name: new RegExp(
+          (
+            {
+              logs: "^日志解释.*已归档",
+              standard: "^固定策略 · 已归档",
+              multi: "^固定策略 · 独立多次.*已归档",
+              adaptive: "^Harness².*已归档",
+            } as Record<string, string>
+          )[summary.mode],
+        ),
+      }),
+    });
     await expect(row).toContainText(
-      `${summary.public_verified} / ${summary.planned}`,
+      summary.repair_applicable === false
+        ? `不适用；交付 ${summary.diagnoses} 份诊断`
+        : `${summary.public_verified} / ${summary.planned}`,
     );
     await expect(row).toContainText(summary.tokens.toLocaleString("en-US"));
   }
@@ -77,7 +86,7 @@ test("comparison: persisted real API results match the browser and remain privat
     ).report_sha256,
   ).toBe(report.report_sha256);
   await page.screenshot({
-    path: resolve(root, "evaluation.png"),
+    path: resolve(root, `${prefix}.png`),
     fullPage: true,
     animations: "disabled",
   });
@@ -88,7 +97,7 @@ test("comparison: persisted real API results match the browser and remain privat
     ),
   ).toBe(true);
   await page.screenshot({
-    path: resolve(root, "evaluation-mobile.png"),
+    path: resolve(root, `${prefix}-mobile.png`),
     fullPage: true,
     animations: "disabled",
   });
@@ -99,6 +108,13 @@ test("comparison: persisted real API results match the browser and remain privat
     ).status(),
   ).toBe(404);
   await other.close();
+  for (const row of report.rows.filter((r: any) => r.mode === "logs")) {
+    const task = (
+      await (await page.request.get(`/api/v1/tasks/${row.task_id}`)).json()
+    ).data;
+    expect(task.executions).toEqual([]);
+    expect(task.evidence.every((e: any) => e.kind === "ci_log")).toBeTruthy();
+  }
   expect(errors).toEqual([]);
   console.log(
     JSON.stringify({

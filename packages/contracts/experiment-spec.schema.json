@@ -25,6 +25,148 @@
       "title": "EvaluationCase",
       "type": "object"
     },
+    "ExperimentSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 _.:-]{0,79}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "dataset": {
+          "const": "public-development",
+          "default": "public-development",
+          "title": "Dataset",
+          "type": "string"
+        },
+        "cases": {
+          "items": {
+            "$ref": "#/$defs/EvaluationCase"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Cases",
+          "type": "array"
+        },
+        "repeats": {
+          "default": 1,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Repeats",
+          "type": "integer"
+        },
+        "agent_tools": {
+          "default": false,
+          "title": "Agent Tools",
+          "type": "boolean"
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        }
+      },
+      "required": [
+        "name",
+        "cases"
+      ],
+      "title": "ExperimentSpec",
+      "type": "object"
+    },
+    "FourArmCase": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "enum": [
+            "pagination",
+            "imports",
+            "signature"
+          ],
+          "title": "Case Id",
+          "type": "string"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        },
+        "log_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Log Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id",
+        "snapshot_sha256",
+        "log_sha256"
+      ],
+      "title": "FourArmCase",
+      "type": "object"
+    },
+    "FourArmSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "2.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 _.:-]{0,79}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "dataset": {
+          "const": "public-development",
+          "default": "public-development",
+          "title": "Dataset",
+          "type": "string"
+        },
+        "cases": {
+          "items": {
+            "$ref": "#/$defs/FourArmCase"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Cases",
+          "type": "array"
+        },
+        "repeats": {
+          "default": 1,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Repeats",
+          "type": "integer"
+        },
+        "agent_tools": {
+          "default": false,
+          "title": "Agent Tools",
+          "type": "boolean"
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "multi_attempts": {
+          "default": 4,
+          "maximum": 4,
+          "minimum": 2,
+          "title": "Multi Attempts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "name",
+        "cases"
+      ],
+      "title": "FourArmSpec",
+      "type": "object"
+    },
     "Limits": {
       "additionalProperties": false,
       "properties": {
@@ -54,54 +196,12 @@
       "type": "object"
     }
   },
-  "additionalProperties": false,
-  "properties": {
-    "schema_version": {
-      "const": "1.0",
-      "default": "1.0",
-      "title": "Schema Version",
-      "type": "string"
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ExperimentSpec"
     },
-    "name": {
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9 _.:-]{0,79}$",
-      "title": "Name",
-      "type": "string"
-    },
-    "dataset": {
-      "const": "public-development",
-      "default": "public-development",
-      "title": "Dataset",
-      "type": "string"
-    },
-    "cases": {
-      "items": {
-        "$ref": "#/$defs/EvaluationCase"
-      },
-      "maxItems": 3,
-      "minItems": 1,
-      "title": "Cases",
-      "type": "array"
-    },
-    "repeats": {
-      "default": 1,
-      "maximum": 3,
-      "minimum": 1,
-      "title": "Repeats",
-      "type": "integer"
-    },
-    "agent_tools": {
-      "default": false,
-      "title": "Agent Tools",
-      "type": "boolean"
-    },
-    "limits": {
-      "$ref": "#/$defs/Limits"
+    {
+      "$ref": "#/$defs/FourArmSpec"
     }
-  },
-  "required": [
-    "name",
-    "cases"
-  ],
-  "title": "ExperimentSpec",
-  "type": "object"
+  ]
 }

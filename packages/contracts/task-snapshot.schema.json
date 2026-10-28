@@ -222,6 +222,19 @@
       "title": "Agent Tools",
       "type": "boolean"
     },
+    "experiment_binding": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Experiment Binding"
+    },
     "lifecycle": {
       "enum": [
         "queued",
@@ -297,7 +310,8 @@
       "enum": [
         "reproduced",
         "not_reproduced",
-        "blocked"
+        "blocked",
+        "not_run"
       ],
       "title": "Reproduction Status",
       "type": "string"

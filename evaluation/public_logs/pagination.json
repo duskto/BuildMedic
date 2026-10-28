@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "pagination",
+  "snapshot_sha256": "33ebbbb192dbde79de07123ab57237ca672cd5fe4146d7b2731a6f6e571e949e",
+  "origin": "local-docker-target-capture",
+  "image_digest": "sha256:23449681af91bd411cb891effde770f0b081af16472495ef3423b9800381535e",
+  "log_sha256": "b6bafcf94388a65fc5fdbd322c199a7e3221a48c7a288ce5f04d93e435326385",
+  "log": "FF......                                                                 [100%]\n=================================== FAILURES ===================================\n___________________________ test_pages[1-expected0] ____________________________\n\npage = 1, expected = [0, 1, 2]\n\n    @pytest.mark.parametrize(\"page,expected\", [(1, [0, 1, 2]), (2, [3, 4, 5]), (3, [6]), (4, [])])\n    def test_pages(page, expected):\n>       assert paginate(list(range(7)), page, 3) == expected\nE       assert [0, 1] == [0, 1, 2]\nE         \nE         Right contains one more item: 2\nE         Use -v to get more diff\n\ntests/test_pagination.py:6: AssertionError\n___________________________ test_pages[2-expected1] ____________________________\n\npage = 2, expected = [3, 4, 5]\n\n    @pytest.mark.parametrize(\"page,expected\", [(1, [0, 1, 2]), (2, [3, 4, 5]), (3, [6]), (4, [])])\n    def test_pages(page, expected):\n>       assert paginate(list(range(7)), page, 3) == expected\nE       assert [3, 4] == [3, 4, 5]\nE         \nE         Right contains one more item: 5\nE         Use -v to get more diff\n\ntests/test_pagination.py:6: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_pagination.py::test_pages[1-expected0] - assert [0, 1] == [...\nFAILED tests/test_pagination.py::test_pages[2-expected1] - assert [3, 4] == [...\n2 failed, 6 passed in 0.02s\n"
+}

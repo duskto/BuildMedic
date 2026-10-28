@@ -151,3 +151,68 @@ def test_run_order_is_alternated_before_any_execution():
     wrong.cases[0].snapshot_sha256 = "0" * 64
     with pytest.raises(store.Conflict):
         evaluation.create("owner", "another-evaluation-key", wrong)
+
+
+def four_arm_spec(**changes):
+    record = evaluation.captured_log("pagination")
+    return evaluation.parse_spec(
+        {
+            **spec().model_dump(),
+            "schema_version": "2.0",
+            "cases": [
+                {
+                    "case_id": "pagination",
+                    "snapshot_sha256": record.snapshot_sha256,
+                    "log_sha256": record.log_sha256,
+                }
+            ],
+            **changes,
+        }
+    )
+
+
+def test_four_arm_api_pins_logs_and_keeps_unscored_diagnosis_separate(client):
+    cases = client.get("/api/v1/evaluation/cases").json()["data"]
+    assert len(cases) == 3 and all(c["log_origin"] == "local-docker-target-capture" for c in cases)
+    response = client.post(
+        "/api/v1/experiments",
+        json=four_arm_spec().model_dump(),
+        headers={"Idempotency-Key": "four-arm-api-test"},
+    )
+    assert response.status_code == 201, response.text
+    detail = response.json()["data"]
+    assert detail["planned"] == 4
+    assert [s["mode"] for s in detail["summary"]] == ["logs", "standard", "multi", "adaptive"]
+    assert all(s["diagnosis_accuracy"] is None for s in detail["summary"])
+    assert detail["summary"][0]["repair_applicable"] is False
+    tid = client.post(f"/api/v1/experiments/{detail['id']}/advance").json()["data"]["task_id"]
+    task = client.get(f"/api/v1/tasks/{tid}").json()["data"]
+    assert task["experiment_binding"]["arm"] == "logs"
+    assert task["evaluation_log"]["log_sha256"] == cases[0]["log_sha256"]
+    assert (
+        client.post(
+            f"/api/v1/tasks/{tid}/retry", headers={"Idempotency-Key": "forbidden-experiment-retry"}
+        ).status_code
+        == 422
+    )
+    current = client.get(f"/api/v1/experiments/{detail['id']}").json()["data"]
+    assert evaluation.recompute(client.get(f"/api/v1/experiments/{detail['id']}/report").json()) == current
+
+
+@pytest.mark.parametrize(
+    "variant", ["missing_log", "bad_log", "too_many", "zero_attempts", "injected_execution"]
+)
+def test_four_arm_manifest_cannot_change_boundaries(client, variant):
+    body = four_arm_spec().model_dump()
+    if variant == "missing_log":
+        body["cases"][0].pop("log_sha256")
+    elif variant == "bad_log":
+        body["cases"][0]["log_sha256"] = "0" * 64
+    elif variant == "too_many":
+        body["multi_attempts"] = 5
+    elif variant == "zero_attempts":
+        body["multi_attempts"] = 0
+    else:
+        body["execution_policy"] = {"shell": "arbitrary"}
+    r = client.post("/api/v1/experiments", json=body, headers={"Idempotency-Key": "invalid-four-arm"})
+    assert r.status_code == (409 if variant == "bad_log" else 422)

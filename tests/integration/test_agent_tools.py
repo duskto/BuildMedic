@@ -21,6 +21,52 @@ def run(coro):
     return asyncio.run(coro, loop_factory=uvloop.new_event_loop)
 
 
+@pytest.mark.parametrize("max_calls, expected_calls, repaired", [(24, 20, True), (11, 11, False)])
+def test_independent_fixed_tools_share_total_budget_and_cannot_see_other_rollouts(
+    environment, max_calls, expected_calls, repaired
+):
+    from buildmedic import evaluation
+
+    log = evaluation.captured_log("pagination")
+    spec = evaluation.FourArmSpec(
+        schema_version="2.0",
+        name="tool-independent-test",
+        agent_tools=True,
+        limits={"max_model_calls": max_calls, "max_tokens": 250000},
+        cases=[
+            evaluation.FourArmCase(
+                case_id="pagination", snapshot_sha256=log.snapshot_sha256, log_sha256=log.log_sha256
+            )
+        ],
+    )
+    eid = evaluation.create("tools-owner", "tool-independent-test", spec)
+    while True:
+        tid = evaluation.advance(eid, "tools-owner")["task_id"]
+        if store.snapshot(tid)["experiment_binding"]["arm"] == "multi":
+            break
+        store.cancel(tid, "tools-owner")
+    provider = FunctionAPI()
+    snap = execute(tid, store.claim(tid), provider)
+    assert snap["outcome"] == ("repaired" if repaired else "budget_exhausted"), snap["message"]
+    assert snap["usage"]["calls"] == expected_calls
+    initial = [
+        json.loads(body["messages"][1]["content"]) for body in provider.calls if len(body["messages"]) == 2
+    ]
+    assert len(initial) == (4 if repaired else 3)
+    assert len({i["rollout_id"] for i in initial}) == len(initial)
+    assert all(
+        i["previous_feedback"] == {}
+        and set(i["visible_execution_ids"]) == {e["id"] for e in snap["baseline"]}
+        for i in initial
+    )
+    if repaired:
+        assert len(snap["candidates"]) == 4 and len(snap["executions"]) == 20
+        assert sum(c["selected"] for c in snap["candidates"]) == 1
+    else:
+        assert not any(c["selected"] for c in snap["candidates"])
+        assert not any(v["kind"] == "independent" for v in snap["validations"])
+
+
 class InProcessRunner(RunnerClient):
     def __init__(self):
         self.client = httpx.AsyncClient(

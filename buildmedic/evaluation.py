@@ -5,7 +5,7 @@ import hashlib
 import json
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, TypeAdapter, model_validator
 from sqlalchemy import func, select, update
 
 from . import db, store
@@ -13,6 +13,7 @@ from .cases import metadata
 from .config import HARNESS_SHA, ROOT, settings
 from .errors import Blocked
 from .schemas import TERMINAL, CreateTask, Limits, Source, StrictModel
+from .security import sanitize
 
 
 def digest(value):
@@ -50,10 +51,81 @@ class ExperimentSpec(StrictModel):
         return self
 
 
+class FourArmCase(EvaluationCase):
+    log_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class FourArmSpec(ExperimentSpec):
+    schema_version: Literal["2.0"]
+    cases: list[FourArmCase] = Field(min_length=1, max_length=3)
+    multi_attempts: int = Field(4, ge=2, le=4, strict=True)
+
+
+ExperimentRequest = ExperimentSpec | FourArmSpec
+SPEC_ADAPTER = TypeAdapter(ExperimentRequest)
+
+
+def parse_spec(value):
+    return SPEC_ADAPTER.validate_python(value)
+
+
+def arms(spec):
+    return (
+        ("logs", "standard", "multi", "adaptive")
+        if spec.schema_version == "2.0"
+        else ("standard", "adaptive")
+    )
+
+
+def arm_limits(spec, arm):
+    if arm == "logs":
+        return spec.limits.model_copy(
+            update={"max_model_calls": 2, "max_tokens": min(spec.limits.max_tokens, 100000)}
+        )
+    return spec.limits
+
+
+class CapturedLog(EvaluationCase):
+    schema_version: Literal["1.0"]
+    origin: Literal["local-docker-target-capture"]
+    image_digest: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    log_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    log: str = Field(min_length=1, max_length=16000)
+
+
+def captured_log(case_id):
+    if case_id not in {"pagination", "imports", "signature"}:
+        raise store.Conflict("未登记公开日志案例")
+    record = CapturedLog.model_validate_json(
+        (ROOT / "evaluation" / "public_logs" / (case_id + ".json")).read_text()
+    )
+    if (
+        record.case_id != case_id
+        or record.snapshot_sha256 != metadata(case_id)["snapshot_sha256"]
+        or hashlib.sha256(record.log.encode()).hexdigest() != record.log_sha256
+        or sanitize(record.log) != record.log
+    ):
+        raise store.Conflict("公开日志身份、源码指纹或内容校验失败")
+    return record
+
+
+def available_cases():
+    return [
+        {
+            **metadata(case_id),
+            "log_sha256": captured_log(case_id).log_sha256,
+            "log_origin": "local-docker-target-capture",
+        }
+        for case_id in ("pagination", "imports", "signature")
+    ]
+
+
 def configuration():
     cfg = settings()
-    policy_files = sorted((ROOT / "buildmedic").glob("*.py")) + sorted(
-        p for p in (ROOT / "harnesses" / "base").rglob("*") if p.is_file()
+    policy_files = (
+        sorted((ROOT / "buildmedic").glob("*.py"))
+        + sorted((ROOT / "evaluation" / "public_logs").glob("*.json"))
+        + sorted(p for p in (ROOT / "harnesses" / "base").rglob("*") if p.is_file())
     )
     return {
         "provider": cfg.model_provider,
@@ -120,11 +192,15 @@ def create(owner, key, spec):
         for case in spec.cases:
             if metadata(case.case_id)["snapshot_sha256"] != case.snapshot_sha256:
                 raise store.Conflict("清单源码指纹与当前登记案例不一致")
+            if spec.schema_version == "2.0" and captured_log(case.case_id).log_sha256 != case.log_sha256:
+                raise store.Conflict("清单日志指纹与公开归档不一致")
         slots = []
         for repeat in range(spec.repeats):
             for index, case in enumerate(spec.cases):
                 # Freeze alternating order before any task runs; no cherry-picked imports.
-                modes = ("standard", "adaptive") if (repeat + index) % 2 == 0 else ("adaptive", "standard")
+                modes = arms(spec)
+                offset = (repeat + index) % len(modes)
+                modes = modes[offset:] + modes[:offset]
                 for mode in modes:
                     slots.append(
                         {
@@ -188,7 +264,7 @@ def advance(eid, owner, check_task=None):
         if row["status"] in {"completed", "cancelled"}:
             return {"status": row["status"], "task_id": None}
         content = copy.deepcopy(row["content"])
-        spec = ExperimentSpec.model_validate(content["manifest"])
+        spec = parse_spec(content["manifest"])
         for index, slot in enumerate(content["slots"]):
             if slot["frozen"]:
                 continue
@@ -209,11 +285,21 @@ def advance(eid, owner, check_task=None):
                 "manifest_sha256": content["manifest_sha256"],
                 "configuration_sha256": content["configuration_sha256"],
             }
+            if spec.schema_version == "2.0":
+                record = captured_log(slot["case_id"])
+                if record.log_sha256 != expected.log_sha256:
+                    raise store.Conflict("公开归档日志已变化，不能继续当前清单")
+                meta["experiment_binding"].update(
+                    protocol="four-arm-v1",
+                    arm=slot["mode"],
+                    attempts=spec.multi_attempts if slot["mode"] == "multi" else 1,
+                )
+                meta["evaluation_log"] = record.model_dump()
             body = CreateTask(
                 source=Source(case_id=slot["case_id"]),
-                mode=slot["mode"],
-                limits=spec.limits,
-                agent_tools=spec.agent_tools,
+                mode="adaptive" if slot["mode"] == "adaptive" else "standard",
+                limits=arm_limits(spec, slot["mode"]),
+                agent_tools=spec.agent_tools and slot["mode"] != "logs",
             ).model_dump()
             if check_task:
                 check_task(CreateTask.model_validate(body))
@@ -318,11 +404,15 @@ def observed(snap):
 
 def render(row, include_rows=True):
     content = row["content"]
+    four_arm = content["manifest"]["schema_version"] == "2.0"
+    spec = parse_spec(content["manifest"]) if four_arm else None
     rows = []
     for slot in content["slots"]:
         record = {k: v for k, v in slot.items() if k != "frozen"}
         frozen = slot["frozen"]
         record["metrics"] = None
+        if four_arm:
+            record["limits"] = arm_limits(spec, slot["mode"]).model_dump()
         if frozen:
             if digest(frozen["snapshot"]) != frozen["sha256"]:
                 raise store.Conflict("评测归档指纹校验失败")
@@ -331,9 +421,11 @@ def render(row, include_rows=True):
                 snapshot_sha256=frozen["sha256"],
                 report=frozen["report"],
             )
+            if four_arm:
+                record["metrics"]["diagnosis_delivered"] = bool(frozen["snapshot"].get("diagnosis"))
         rows.append(record)
     aggregates = []
-    for mode in ("standard", "adaptive"):
+    for mode in ("logs", "standard", "multi", "adaptive") if four_arm else ("standard", "adaptive"):
         group = [r for r in rows if r["mode"] == mode]
         complete = [r["metrics"] for r in group if r["metrics"]]
         costs = [r["cost_usd"] for r in complete]
@@ -367,6 +459,12 @@ def render(row, include_rows=True):
                 ),
             }
         )
+        if four_arm:
+            aggregates[-1].update(
+                repair_applicable=mode != "logs",
+                diagnosis_accuracy=None,
+                diagnoses=sum(r["diagnosis_delivered"] for r in complete),
+            )
     environments = {f for row in rows if row["metrics"] for f in row["metrics"]["environment_fingerprints"]}
     public = {
         "id": row["id"],

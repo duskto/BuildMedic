@@ -86,6 +86,18 @@ const labels: Record<string, string> = {
   reproduced: "已复现",
 };
 const terminal = new Set(["completed", "failed", "interrupted", "cancelled"]);
+function taskModeName(task: Task) {
+  const arm = task.experiment_binding?.arm;
+  return arm === "logs"
+    ? "仅日志解释"
+    : arm === "multi"
+      ? "固定策略 · 独立多次"
+      : arm === "standard"
+        ? "固定策略 · 单次"
+        : task.mode === "standard"
+          ? "标准诊断"
+          : "自适应诊断";
+}
 function date(value: number) {
   return new Date(value * 1000).toLocaleString("zh-CN", {
     month: "2-digit",
@@ -525,9 +537,7 @@ function TaskTable({ tasks }: { tasks: Task[] }) {
                 </div>
               </td>
               <td>
-                <span className="mode-label">
-                  {t.mode === "standard" ? "标准诊断" : "自适应诊断"}
-                </span>
+                <span className="mode-label">{taskModeName(t)}</span>
               </td>
               <td className="muted nowrap">{date(t.created_at)}</td>
               <td>
@@ -1351,7 +1361,10 @@ function TaskDetail() {
           {done ? (
             <button
               className="button secondary"
-              disabled={retry.isPending}
+              disabled={
+                retry.isPending ||
+                task.experiment_binding?.protocol === "four-arm-v1"
+              }
               onClick={() => retry.mutate()}
             >
               <Plus size={16} />
@@ -1398,9 +1411,7 @@ function TaskDetail() {
         </div>
         <div>
           <small>诊断模式</small>
-          <strong>
-            {task.mode === "standard" ? "标准诊断" : "自适应诊断"}
-          </strong>
+          <strong>{taskModeName(task)}</strong>
         </div>
         <div>
           <small>状态同步</small>
@@ -2091,12 +2102,22 @@ function StrategyPanel({ task }: { task: Task }) {
         <Activity size={18} />
         <div>
           <strong>
-            {task.mode === "standard" ? "固定策略执行记录" : "自适应执行记录"}
+            {task.experiment_binding?.arm === "logs"
+              ? "日志解释记录"
+              : task.experiment_binding?.arm === "multi"
+                ? "独立固定策略执行记录"
+                : task.mode === "standard"
+                  ? "固定策略执行记录"
+                  : "自适应执行记录"}
           </strong>
           <p>
-            {task.mode === "standard"
-              ? "标准模式的补丁修正不代表 Harness² 策略优化。只展示实际执行事实。"
-              : "Harness² 分别提出 INV / DOM 策略，再组合为 c1。k=1 直接采用唯一组合最终结果，修复结论由独立测试决定。"}
+            {task.experiment_binding?.arm === "logs"
+              ? "仅使用固定归档日志，未读取源码或执行代码，诊断准确率未评分。"
+              : task.experiment_binding?.arm === "multi"
+                ? "每次尝试使用相同初始材料，不共享上次补丁或验证反馈；选中候选仍另做独立验收。"
+                : task.mode === "standard"
+                  ? "标准模式的补丁修正不代表 Harness² 策略优化。只展示实际执行事实。"
+                  : "Harness² 分别提出 INV / DOM 策略，再组合为 c1。k=1 直接采用唯一组合最终结果，修复结论由独立测试决定。"}
           </p>
         </div>
       </div>

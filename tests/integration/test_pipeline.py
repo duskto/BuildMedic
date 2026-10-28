@@ -10,7 +10,7 @@ import pytest
 import uvloop
 from sqlalchemy import update
 
-from buildmedic import db, store
+from buildmedic import db, evaluation, store
 from buildmedic import runner as runner_module
 from buildmedic.cases import metadata
 from buildmedic.clients import ModelClient, RunnerClient
@@ -23,6 +23,66 @@ from buildmedic.worker import reap_expired
 
 def run(coro):
     return asyncio.run(coro, loop_factory=uvloop.new_event_loop)
+
+
+@pytest.mark.parametrize("invalid_first", [False, True])
+def test_log_explanation_never_reads_source_or_calls_runner(monkeypatch, invalid_first):
+    configured_model(monkeypatch)
+    log = evaluation.captured_log("pagination")
+    spec = evaluation.FourArmSpec(
+        schema_version="2.0",
+        name="log-isolation",
+        cases=[
+            evaluation.FourArmCase(
+                case_id="pagination", snapshot_sha256=log.snapshot_sha256, log_sha256=log.log_sha256
+            )
+        ],
+    )
+    eid = evaluation.create("owner", "log-isolation", spec)
+    tid = evaluation.advance(eid, "owner")["task_id"]
+
+    class NoRunner:
+        async def health(self):
+            raise AssertionError("Log arm must not inspect Runner")
+
+        async def start(self, _):
+            raise AssertionError("Log arm must not execute code")
+
+        async def close(self):
+            pass
+
+    class LogModel:
+        calls = 0
+
+        async def complete(self, messages):
+            self.calls += 1
+            material = json.loads(messages[1]["content"])["materials"]
+            assert material["source"] == [] and len(material["evidence"]) == 1
+            assert material["evidence"][0]["kind"] == "ci_log" and material["logs"] == log.log
+            return json.dumps(
+                {
+                    "summary": "Test-only log hypothesis",
+                    "failure_category": "test",
+                    "root_cause": {
+                        "description": "Observed in log",
+                        "evidence_ids": [material["evidence"][0]["id"]],
+                        "certainty": "supported" if invalid_first and self.calls == 1 else "hypothesis",
+                    },
+                    "next_action": "Review source in a separate task",
+                }
+            ), {"total_tokens": 100}
+
+        async def close(self):
+            pass
+
+    model = LogModel()
+    run(run_claimed(tid, store.claim(tid), runner=NoRunner(), model=model))
+    snap = store.snapshot(tid)
+    assert snap["outcome"] == "diagnosed_only" and snap["reproduction_status"] == "not_run"
+    assert model.calls == (2 if invalid_first else 1)
+    assert snap["executions"] == snap["candidates"] == snap["validations"] == []
+    assert all(e["kind"] == "ci_log" for e in snap["evidence"])
+    assert "preflight" not in snap["phase_history"] and "reproduce" not in snap["phase_history"]
 
 
 class InProcessRunner(RunnerClient):

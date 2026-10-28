@@ -24,6 +24,7 @@ API 根路径为 `/api/v1`。成功返回 `{data, request_id}`，错误返回 `{
 | POST | `/experience/{id}/revoke` | 撤销对后续任务的可用性，保留历史 |
 | GET | `/experience/snapshots/{id}` | 当前会话可见的冻结任务输入 |
 | POST / GET | `/experiments` | 幂等登记固定开发集清单 / 当前会话的对照列表 |
+| GET | `/evaluation/cases` | 可登记案例的源码与公开日志指纹 |
 | GET | `/experiments/{id}` | 同预算执行与冻结结果的统计 |
 | POST | `/experiments/{id}/advance` | 返回当前任务或原子安排下一项；可安全重复 |
 | POST | `/experiments/{id}/cancel` | 停止后续安排并取消当前任务 |
@@ -59,6 +60,6 @@ GitHub URL 仅接受 `https://github.com/owner/repo/actions/runs/id`，可使用
 
 `agent_tools=true` 显式启用原生工具循环，支持标准与自适应的登记来源，缺省关闭。工具任务最高 32 次调用 / 250,000 Token，且不能超过 `/health.max_model_calls`。标准至少 4 次 / 24,000 Token，自适应至少 11 次 / 48,000 Token，含经验反思时至少 12 次。前置配置不满足返回 `agent_tools_unavailable`，预算不足返回 `agent_budget_too_small`。未开启工具的任务仍最多 12 次调用，旧请求幂等 hash 兼容。`/health.agent_tools_ready` 表示配置就绪；不探测付费工具生成能力。快照增加 `agent_tools`、`agent_actions`，事件增加 `agent.tool_started` / `agent.tool_finished`，详见[工具边界与预算](agent-tools.md)。
 
-开发集对照只接受固定本地案例、源码 hash、相同预算、重复次数和工具开关，经验库关闭。创建需要 Idempotency-Key，不执行模型；推进使用现有 Worker 与任务配额，不接受任意任务 ID 或客户端指标。绑定清单 / 配置指纹、配置漂移停止、报告下载与会话归属详见[评测 API](evaluation.md)。
+开发集对照支持 `schema_version=2.0` 的四组协议，要求固定本地案例、源码及公开日志 hash、修复组相同预算、重复次数与工具开关，经验库关闭。`multi_attempts` 为 2–4，默认 4；日志组最多 2 次调用且不使用源码或 Runner。旧版 `1.0` 保留原两组行为及复算口径。创建需要 Idempotency-Key，不执行模型；推进使用现有 Worker 与任务配额，不接受任意任务 ID 或客户端指标。四组任务的关联重试返回 `experiment_retry_unsupported`，重复实验需新建清单。快照的 `experiment_binding` 记录归属和组别，日志组 `reproduction_status=not_run`；诊断准确率未评分时保持 null。详见[评测 API](evaluation.md)。
 
 任务快照的 `experience` 记录创建时冻结的输入版本/指纹、反思状态、验证后的草稿和已发布版本 ID。`experience_reflection` 模型调用与其他角色共用预算。SSE 增加 `experience.reflecting`、`experience.reflected`、`experience.rejected`、`experience.available`、`experience.unverified`、`experience.published`。发布只使用服务器生成的草稿，不接收客户端编造的经验或策略，取消、未修复或证据不匹配返回 409。重复发布同一来源任务返回原版本；不同来源使用已占用的幂等键返回 409。全部接口检查当前会话归属，越权返回 404。详见[经验管理](experience.md)。

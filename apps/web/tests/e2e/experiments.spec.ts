@@ -96,11 +96,12 @@ test("registering a comparison pins source hashes and equal budgets before any e
   let advanced = 0;
   await page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path.endsWith("/demo-cases"))
+    if (path.endsWith("/evaluation/cases"))
       return route.fulfill({
         json: {
           data: ["pagination", "imports", "signature"].map((id) => ({
-            id,
+            case_id: id,
+            log_sha256: "e".repeat(64),
             title: id,
             description: id,
             category: "fixture",
@@ -172,7 +173,69 @@ test("registering a comparison pins source hashes and equal budgets before any e
     max_wall_seconds: 600,
   });
   expect(captured?.cases).toHaveLength(3);
+  expect(captured?.schema_version).toBe("2.0");
+  expect(captured?.multi_attempts).toBe(4);
+  expect((captured?.cases as { log_sha256: string }[])[0].log_sha256).toBe(
+    "e".repeat(64),
+  );
   expect(advanced).toBe(0);
   await page.getByRole("button", { name: "运行 / 继续对照" }).click();
   await expect.poll(() => advanced).toBe(1);
+});
+
+test("four-arm view separates unscored log diagnoses from verified repairs", async ({
+  page,
+}) => {
+  const four = {
+    ...report,
+    manifest: { ...report.manifest, schema_version: "2.0", multi_attempts: 4 },
+    finished: 4,
+    planned: 4,
+    summary: [
+      {
+        ...report.summary[0],
+        mode: "logs",
+        public_verified: 0,
+        diagnoses: 1,
+        diagnosis_accuracy: null,
+        repair_applicable: false,
+        calls: 1,
+        tokens: 100,
+        checks: 0,
+      },
+      { ...report.summary[0], repair_applicable: true },
+      { ...report.summary[0], mode: "multi", repair_applicable: true },
+      report.summary[1],
+    ],
+    rows: [
+      {
+        ...report.rows[0],
+        mode: "logs",
+        metrics: {
+          ...report.rows[0].metrics,
+          outcome: "diagnosed_only",
+          public_verified: false,
+          checks: 0,
+        },
+      },
+      report.rows[0],
+      { ...report.rows[0], mode: "multi" },
+      report.rows[1],
+    ],
+  };
+  await page.route("**/api/v1/experiments/**", (route) =>
+    route.fulfill({ json: { data: four, request_id: "fixture" } }),
+  );
+  await page.goto("/experiments/comparison-fixture");
+  await expect(page.getByText("不适用；交付 1 份诊断")).toBeVisible();
+  await expect(page.getByText(/日志组诊断准确率未评分/)).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "固定策略 · 独立多次", exact: true }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });

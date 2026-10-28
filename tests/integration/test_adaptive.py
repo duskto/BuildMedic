@@ -483,3 +483,71 @@ def test_preregistered_task_stops_before_paid_call_after_config_change(adaptive_
     run(run_claimed(tid, store.claim(tid), runner=InProcessRunner(), model=model))
     snap = store.snapshot(tid)
     assert snap["outcome"] == "blocked" and model.calls == [] and snap["executions"] == []
+
+
+def test_four_arm_independent_attempts_do_not_share_feedback_or_stop_at_first_success(adaptive_environment):
+    log = evaluation.captured_log("pagination")
+    spec = evaluation.FourArmSpec(
+        schema_version="2.0",
+        name="four-arm-scripted",
+        cases=[
+            evaluation.FourArmCase(
+                case_id="pagination", snapshot_sha256=log.snapshot_sha256, log_sha256=log.log_sha256
+            )
+        ],
+    )
+    eid = evaluation.create("owner", "four-arm-scripted", spec)
+    material_sets = {}
+
+    class Provider(ScriptedAdaptiveModel):
+        def __init__(self, arm):
+            super().__init__()
+            self.arm = arm
+
+        async def complete(self, messages):
+            body = json.loads(messages[1]["content"])
+            if "materials" in body:
+                materials = body["materials"]
+                material_sets.setdefault(self.arm, []).append(materials)
+                if self.arm == "logs":
+                    assert materials["source"] == []
+                    return json.dumps(
+                        {
+                            "summary": "Explicit log-only test",
+                            "failure_category": "test",
+                            "root_cause": {
+                                "description": "Log hypothesis",
+                                "evidence_ids": [materials["evidence"][0]["id"]],
+                                "certainty": "hypothesis",
+                            },
+                            "next_action": "Inspect repository separately",
+                            "patch": "",
+                        }
+                    ), {"total_tokens": 100}
+            raw, usage = await super().complete(messages)
+            if self.arm in {"standard", "multi"} and self.solvers == 1:
+                data = json.loads(raw)
+                data["edits"][0]["after"] = "start + page_size - 2"
+                return json.dumps(data), usage
+            return raw, usage
+
+    while True:
+        item = evaluation.advance(eid, "owner")
+        if not item["task_id"]:
+            break
+        tid = item["task_id"]
+        arm = store.snapshot(tid)["experiment_binding"]["arm"]
+        run(run_claimed(tid, store.claim(tid), runner=InProcessRunner(), model=Provider(arm)))
+    report = evaluation.get(eid, "owner")
+    assert report["status"] == "completed" and report["finished"] == 4
+    assert [s["calls"] for s in report["summary"]] == [1, 1, 4, 7]
+    assert [s["checks"] for s in report["summary"]] == [0, 4, 12, 12]
+    assert [s["public_verified"] for s in report["summary"]] == [0, 0, 1, 1]
+    assert report["summary"][0]["diagnoses"] == 1 and report["summary"][0]["diagnosis_accuracy"] is None
+    assert all(m == material_sets["multi"][0] for m in material_sets["multi"])
+    assert all("previous_patch" not in m and "validation_feedback" not in m for m in material_sets["multi"])
+    multi = store.snapshot(report["rows"][2]["task_id"])
+    assert len(multi["rollouts"]) == len(multi["candidates"]) == 4
+    assert len({r["input_sha256"] for r in multi["rollouts"]}) == 1
+    assert next(c for c in multi["candidates"] if c["selected"])["id"] == multi["candidates"][1]["id"]
+    assert evaluation.recompute(evaluation.export_report(eid, "owner")) == report

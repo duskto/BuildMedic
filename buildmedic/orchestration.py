@@ -554,11 +554,20 @@ async def run_registered(ctx, case_id, case):
     if not settings().model_ready:
         raise Blocked("原始失败已复现；尚未配置真实模型服务，未生成补丁")
     ctx.phase("diagnose", "基于测试日志与固定源码定位失败原因")
+    binding = ctx.snap.get("experiment_binding", {})
+    if binding.get("protocol") == "four-arm-v1":
+        from .evaluation_execution import attach_log
+
+        attach_log(ctx)
     materials = build_materials(ctx, case_id, target_log + "\n" + regression_log)
     if ctx.body["mode"] == "adaptive":
         from .adaptive import run_adaptive
 
         return await run_adaptive(ctx, case_id, materials, [target, regression])
+    if binding.get("protocol") == "four-arm-v1":
+        from .evaluation_execution import run_fixed
+
+        return await run_fixed(ctx, case_id, materials, [target, regression], binding["attempts"])
     for attempt in range(2):
         ctx.guard()
         rollout = {
@@ -749,7 +758,13 @@ async def run_claimed(task_id, claimed, *, runner=None, model=None, validation_j
             require_adaptive()
             if body["source"]["type"] != "demo" and not snap.get("runner_profile"):
                 raise Blocked("自适应模式需要已登记案例或固定提交的远程 Job")
-        outcome, message = await (run_demo(ctx) if body["source"]["type"] == "demo" else run_github(ctx))
+        from .evaluation_execution import policy, run_logs
+
+        execution_policy = policy(ctx)
+        if execution_policy and execution_policy["arm"] == "logs":
+            outcome, message = await run_logs(ctx)
+        else:
+            outcome, message = await (run_demo(ctx) if body["source"]["type"] == "demo" else run_github(ctx))
         ctx.phase("report", "归档诊断、环境指纹和独立验证证据")
         archive_report(ctx, "completed", outcome, message)
         store.finish(task_id, token, "completed", outcome, message)

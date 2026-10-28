@@ -307,7 +307,7 @@ def list_tasks(
 
 @app.post("/api/v1/experiments", status_code=201)
 def create_experiment(
-    request: Request, body: evaluation.ExperimentSpec, idempotency_key: str = Header(default="")
+    request: Request, body: evaluation.ExperimentRequest, idempotency_key: str = Header(default="")
 ):
     require_key(idempotency_key)
     # Creation is a local preregistration. Actual model/Runner readiness is checked on execution.
@@ -318,6 +318,11 @@ def create_experiment(
 @app.get("/api/v1/experiments")
 def list_experiments(request: Request, page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=50)):
     return envelope(request, evaluation.listing(request.state.owner, page, page_size))
+
+
+@app.get("/api/v1/evaluation/cases")
+def evaluation_cases(request: Request):
+    return envelope(request, evaluation.available_cases())
 
 
 @app.get("/api/v1/experiments/{eid}")
@@ -362,7 +367,11 @@ def cancel_task(tid: str, request: Request):
 @app.post("/api/v1/tasks/{tid}/retry", status_code=202)
 async def retry_task(tid: str, request: Request, idempotency_key: str = Header(default="")):
     require_key(idempotency_key)
-    store.snapshot(tid, request.state.owner)
+    original = store.snapshot(tid, request.state.owner)
+    if original.get("experiment_binding", {}).get("protocol") == "four-arm-v1":
+        raise AppError(
+            "experiment_retry_unsupported", "实验任务需通过新清单重复运行，不能改变已登记的组别与次数", 422
+        )
     body = CreateTask.model_validate(store.task_body(tid, request.state.owner))
     new_id = store.existing_request(request.state.owner, idempotency_key, body.model_dump(), parent_id=tid)
     if new_id is None:

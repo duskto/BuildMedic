@@ -166,12 +166,13 @@ class TaskSnapshot(BaseModel):
     parent_task_id: str | None
     mode: Literal["standard", "adaptive"]
     agent_tools: bool = False
+    experiment_binding: dict | None = None
     lifecycle: Lifecycle
     phase: Phase
     phase_history: list[Phase] = Field(default_factory=list)
     outcome: Outcome | None
     validation_status: Literal["not_run", "passed", "failed", "blocked"]
-    reproduction_status: Literal["reproduced", "not_reproduced", "blocked"]
+    reproduction_status: Literal["reproduced", "not_reproduced", "blocked", "not_run"]
     message: str
     state_version: int
     last_event_seq: int

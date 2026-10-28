@@ -3,10 +3,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { api } from "./api";
-import { caseSchema, healthSchema } from "./contracts";
+import { healthSchema } from "./contracts";
 
 const summarySchema = z.object({
-  mode: z.enum(["standard", "adaptive"]),
+  mode: z.enum(["logs", "standard", "multi", "adaptive"]),
   planned: z.number(),
   finished: z.number(),
   public_verified: z.number(),
@@ -23,17 +23,26 @@ const summarySchema = z.object({
   blocked: z.number(),
   budget_exhausted: z.number(),
   interrupted: z.number(),
+  repair_applicable: z.boolean().optional(),
+  diagnoses: z.number().optional(),
+  diagnosis_accuracy: z.number().nullable().optional(),
 });
 export const experimentSchema = z.object({
   id: z.string(),
   created_at: z.number(),
   status: z.enum(["planned", "running", "completed", "cancelled"]),
   manifest: z.object({
+    schema_version: z.string().optional(),
+    multi_attempts: z.number().optional(),
     name: z.string(),
     dataset: z.literal("public-development"),
     repeats: z.number(),
     cases: z.array(
-      z.object({ case_id: z.string(), snapshot_sha256: z.string() }),
+      z.object({
+        case_id: z.string(),
+        snapshot_sha256: z.string(),
+        log_sha256: z.string().optional(),
+      }),
     ),
     agent_tools: z.boolean(),
     limits: z.object({
@@ -84,12 +93,28 @@ const pageSchema = z.object({
   page_size: z.number(),
 });
 const modeName = (mode: string) =>
-  mode === "adaptive" ? "Harness²" : "固定策略";
+  ({
+    logs: "日志解释",
+    standard: "固定策略",
+    multi: "固定策略 · 独立多次",
+    adaptive: "Harness²",
+  })[mode] ?? mode;
 const stateName: Record<string, string> = {
   planned: "已登记",
   running: "执行中",
   completed: "已完成",
   cancelled: "已停止",
+};
+const outcomeName: Record<string, string> = {
+  diagnosed_only: "仅交付诊断",
+  unresolved: "未解决",
+  blocked: "环境阻塞",
+  not_reproduced: "未复现",
+  budget_exhausted: "预算耗尽",
+  failed: "执行失败",
+  interrupted: "执行中断",
+  cancelled: "已取消",
+  completed: "已完成",
 };
 function Failure({ error }: { error: unknown }) {
   return error ? (
@@ -105,6 +130,7 @@ function money(cost: number | null) {
 export function Experiments() {
   const [page, setPage] = useState(1);
   const [repeats, setRepeats] = useState(1);
+  const [protocol, setProtocol] = useState("2.0");
   const key = useRef(crypto.randomUUID());
   const navigate = useNavigate();
   const list = useQuery({
@@ -112,8 +138,18 @@ export function Experiments() {
     queryFn: () => api(`/experiments?page=${page}&page_size=10`, pageSchema),
   });
   const cases = useQuery({
-    queryKey: ["cases"],
-    queryFn: () => api("/demo-cases", z.array(caseSchema)),
+    queryKey: ["evaluation-cases"],
+    queryFn: () =>
+      api(
+        "/evaluation/cases",
+        z.array(
+          z.object({
+            case_id: z.string(),
+            snapshot_sha256: z.string(),
+            log_sha256: z.string(),
+          }),
+        ),
+      ),
   });
   const health = useQuery({
     queryKey: ["health"],
@@ -127,13 +163,16 @@ export function Experiments() {
         body: JSON.stringify({
           name: `development-${new Date().toISOString().slice(0, 10)}`,
           repeats,
+          schema_version: protocol,
+          ...(protocol === "2.0" ? { multi_attempts: 4 } : {}),
           cases: cases.data
             ?.filter((c) =>
-              ["pagination", "imports", "signature"].includes(c.id),
+              ["pagination", "imports", "signature"].includes(c.case_id),
             )
             .map((c) => ({
-              case_id: c.id,
+              case_id: c.case_id,
               snapshot_sha256: c.snapshot_sha256,
+              ...(protocol === "2.0" ? { log_sha256: c.log_sha256 } : {}),
             })),
           limits: {
             max_wall_seconds: 600,
@@ -159,10 +198,30 @@ export function Experiments() {
       <section className="panel padded">
         <h2>登记开发集对照</h2>
         <p>
-          分页、内部导入、调用签名三个案例；固定策略与 Harness²
-          使用相同模型、工具设置和预算。每项最多 12 次调用、100,000 Token、10
-          分钟，经验库关闭。
+          分页、内部导入、调用签名三个案例。四组分别为仅日志解释、单次固定策略、四次独立固定策略与
+          Harness²；修复组使用相同模型、工具设置和总预算。每项最多 12
+          次调用、100,000 Token、10
+          分钟，经验库关闭。日志组不执行代码，诊断准确率尚未评分。
         </p>
+        <label>
+          实验组别{" "}
+          <select
+            aria-label="实验组别"
+            value={protocol}
+            onChange={(e) => {
+              setProtocol(e.target.value);
+              key.current = crypto.randomUUID();
+            }}
+          >
+            <option value="2.0">四组对照</option>
+            <option value="1.0">旧版两组对照</option>
+          </select>
+        </label>{" "}
+        {protocol === "1.0" && (
+          <p className="small-note">
+            旧版固定策略最多两次带反馈修正；不等同于四组实验的单次固定策略。
+          </p>
+        )}
         <label>
           重复次数{" "}
           <select
@@ -181,7 +240,7 @@ export function Experiments() {
           </select>
         </label>
         <p>
-          共 {6 * repeats}{" "}
+          共 {(protocol === "2.0" ? 12 : 6) * repeats}{" "}
           项执行。登记清单后可查看预算，再启动运行；会产生真实模型用量。
         </p>
         <Failure error={cases.error ?? health.error ?? create.error} />
@@ -222,9 +281,10 @@ export function Experiments() {
               </p>
               <p className="small-note">
                 {item.summary
-                  .map(
-                    (s) =>
-                      `${modeName(s.mode)}：${s.public_verified}/${s.planned} 通过`,
+                  .map((s) =>
+                    s.repair_applicable === false
+                      ? `${modeName(s.mode)}：${s.diagnoses}/${s.planned} 份诊断，未评分`
+                      : `${modeName(s.mode)}：${s.public_verified}/${s.planned} 通过`,
                   )
                   .join("；")}
               </p>
@@ -318,6 +378,13 @@ export function ExperimentDetail() {
       </div>
       <section className="panel padded">
         <h2>固定设置</h2>
+        {item.manifest.schema_version === "2.0" && (
+          <p>
+            日志解释组最多 2 次调用，不执行代码；单次固定策略 1 次尝试，多次组{" "}
+            {item.manifest.multi_attempts}{" "}
+            次独立尝试。下列预算为每个修复组的总上限。
+          </p>
+        )}
         <p>
           {item.configuration.provider} /{" "}
           {item.configuration.model_id || "未配置模型"} · 每项{" "}
@@ -407,10 +474,14 @@ export function ExperimentDetail() {
                     </small>
                   </td>
                   <td>
-                    {s.public_verified} / {s.planned}
+                    {s.repair_applicable === false
+                      ? `不适用；交付 ${s.diagnoses} 份诊断`
+                      : `${s.public_verified} / ${s.planned}`}
                   </td>
                   <td>
-                    {s.reproduced} / {s.planned}
+                    {s.repair_applicable === false
+                      ? "未执行"
+                      : `${s.reproduced} / ${s.planned}`}
                   </td>
                   <td>
                     {s.calls} 次 / {s.tokens.toLocaleString()}
@@ -431,6 +502,7 @@ export function ExperimentDetail() {
         </div>
         {item.summary.map((s) => (
           <p key={s.mode} className="small-note">
+            {s.repair_applicable === false ? "日志组诊断准确率未评分。" : ""}
             {modeName(s.mode)}：环境阻塞 {s.blocked}，预算停止{" "}
             {s.budget_exhausted}，失败 / 中断 / 取消 {s.interrupted}。总 Token /
             通过数：
@@ -465,7 +537,9 @@ export function ExperimentDetail() {
                     {row.metrics
                       ? row.metrics.public_verified
                         ? "公开检查通过"
-                        : (row.metrics.outcome ?? row.metrics.lifecycle)
+                        : (outcomeName[
+                            row.metrics.outcome ?? row.metrics.lifecycle
+                          ] ?? "未通过")
                       : row.task_id
                         ? "执行或等待归档"
                         : "未执行"}

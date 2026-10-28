@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from buildmedic.evaluation import ExperimentSpec, digest
+from buildmedic.evaluation import arms, digest, parse_spec
 
 
 def save(path, state):
@@ -49,7 +49,7 @@ def main():
         or parsed.fragment
     ):
         parser.error("--url 必须是受信任 API 的根地址，不能包含凭据、查询或 fragment")
-    spec = ExperimentSpec.model_validate_json(args.plan.read_text())
+    spec = parse_spec(json.loads(args.plan.read_text()))
     manifest = spec.model_dump(mode="json")
     state = (
         json.loads(args.state.read_text())
@@ -84,7 +84,10 @@ def main():
             state["experiment_id"] = result["id"]
             save(args.state, state)
         eid = state["experiment_id"]
-        print(f"评测 {eid}；固定 {len(spec.cases)} 个开发案例 × {spec.repeats} 次 × 2 组", flush=True)
+        print(
+            f"评测 {eid}；固定 {len(spec.cases)} 个开发案例 × {spec.repeats} 次 × {len(arms(spec))} 组",
+            flush=True,
+        )
         if args.cancel:
             request(client, "POST", f"/api/v1/experiments/{eid}/cancel")
             print("已停止后续任务，并请求取消当前任务。", flush=True)

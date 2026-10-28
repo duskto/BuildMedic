@@ -94,6 +94,6 @@ cd apps/web
 npm run test:live -- --grep 'adaptive:'
 ```
 
-远程固定 SHA 快照、登记 profile 与自适应执行已实现，并通过真实 Docker、模拟 GitHub 与脚本模型的集成检查；真实失败 Run 的端到端验收仍待执行。同会话的同域经验发布及公开开发集同预算对照已接通。真实两组均 3/3 通过公开检查，Harness² 消耗更多，未显示通过数收益；见[评测记录](evaluation.md)。隐藏行为评测与完整四组实验仍未完成，不能把开发验收称为整个 P1/P2 已完成。
+远程固定 SHA 快照、登记 profile 与自适应执行已实现，并通过真实 Docker、模拟 GitHub 与脚本模型的集成检查；真实失败 Run 的端到端验收仍待执行。同会话的同域经验发布及公开开发集四组对照已接通。真实三个修复组均 3/3 通过公开检查，Harness² 消耗更多，未显示通过数收益；日志组只交付未评分诊断，见[评测记录](evaluation.md)。隐藏行为与分组隔离测试集评测仍未完成，不能把开发验收称为整个 P1/P2 已完成。
 
 上游来源：[spec.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/core/spec.py)、[schedule.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/core/schedule.py)、[recursion.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/core/recursion.py)、[demo.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/demo.py)。

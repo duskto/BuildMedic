@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "imports",
+  "snapshot_sha256": "234321f8ea43b6d11b17edf45cf0d89d445fe4123b8f90bb6fdd5082095f0dad",
+  "origin": "local-docker-target-capture",
+  "image_digest": "sha256:23449681af91bd411cb891effde770f0b081af16472495ef3423b9800381535e",
+  "log_sha256": "c50861523d999e7de9ce0811415ad975ee88a714f16c97e45e30e64f1bad77c6",
+  "log": "\n==================================== ERRORS ====================================\n____________________ ERROR collecting tests/test_invoice.py ____________________\nImportError while importing test module '/work/repo/tests/test_invoice.py'.\nHint: make sure your test modules/packages have valid Python names.\nTraceback:\n/usr/local/lib/python3.12/importlib/__init__.py:90: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntests/test_invoice.py:1: in <module>\n    from demo.invoice import invoice_total\nsrc/demo/invoice.py:1: in <module>\n    from demo.utils import format_price\nE   ModuleNotFoundError: No module named 'demo.utils'\n=========================== short test summary info ============================\nERROR tests/test_invoice.py\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 error in 0.06s\n"
+}

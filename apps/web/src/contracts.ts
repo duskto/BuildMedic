@@ -232,6 +232,15 @@ export const taskSchema = z
     execution_label: z.string(),
     mode: z.enum(["standard", "adaptive"]),
     agent_tools: z.boolean().optional(),
+    experiment_binding: z
+      .object({
+        id: z.string(),
+        protocol: z.string().optional(),
+        arm: z.string().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
     lifecycle: lifecycleSchema,
     phase: phaseSchema,
     phase_history: z.array(phaseSchema).optional(),
