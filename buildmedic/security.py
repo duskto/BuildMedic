@@ -21,7 +21,12 @@ def sanitize(value: str) -> str:
         r"(?i)((?:api[_-]?key|access[_-]?token|password|secret)\s*[=:]\s*)[^\s,;]+", r"\1[REDACTED]", value
     )
     value = re.sub(r"(https?://[^\s?]+)\?[^\s]+", r"\1?[REDACTED]", value)
-    for secret in (settings().model_api_key, settings().github_token, settings().runner_token):
+    for secret in (
+        settings().model_api_key,
+        settings().github_token,
+        settings().runner_token,
+        settings().scorer_token,
+    ):
         if secret and len(secret) >= 8:
             value = value.replace(secret, "[REDACTED]")
     return value.replace("\x00", "")

@@ -1,0 +1,210 @@
+{
+  "$defs": {
+    "ScoreRow": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "maximum": 35,
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "task_id": {
+          "pattern": "^[a-f0-9]{32}$",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "case_id": {
+          "enum": [
+            "pagination",
+            "imports",
+            "signature"
+          ],
+          "title": "Case Id",
+          "type": "string"
+        },
+        "arm": {
+          "enum": [
+            "logs",
+            "standard",
+            "multi",
+            "adaptive"
+          ],
+          "title": "Arm",
+          "type": "string"
+        },
+        "patch_sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Patch Sha256"
+        },
+        "status": {
+          "enum": [
+            "not_applicable",
+            "no_candidate",
+            "passed",
+            "failed",
+            "not_reproduced",
+            "evaluation_error"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "hidden_verified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Hidden Verified"
+        },
+        "new_regression": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "New Regression"
+        },
+        "probes": {
+          "maximum": 50,
+          "minimum": 0,
+          "title": "Probes",
+          "type": "integer"
+        },
+        "baseline_failed": {
+          "maximum": 50,
+          "minimum": 0,
+          "title": "Baseline Failed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "task_id",
+        "case_id",
+        "arm",
+        "patch_sha256",
+        "status",
+        "hidden_verified",
+        "new_regression",
+        "probes",
+        "baseline_failed"
+      ],
+      "title": "ScoreRow",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-f0-9]{32}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "experiment_id": {
+      "pattern": "^[a-f0-9]{32}$",
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "report_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Report Sha256",
+      "type": "string"
+    },
+    "request_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Request Sha256",
+      "type": "string"
+    },
+    "suite_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Suite Sha256",
+      "type": "string"
+    },
+    "image_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Image Digest",
+      "type": "string"
+    },
+    "scorer_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Scorer Sha256",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "finished_at": {
+      "title": "Finished At",
+      "type": "number"
+    },
+    "rows": {
+      "items": {
+        "$ref": "#/$defs/ScoreRow"
+      },
+      "maxItems": 36,
+      "title": "Rows",
+      "type": "array"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "enum": [
+            "evaluation_failed",
+            "service_restarted"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "signature": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Signature",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "experiment_id",
+    "report_sha256",
+    "request_sha256",
+    "suite_sha256",
+    "image_digest",
+    "scorer_sha256",
+    "status",
+    "finished_at",
+    "rows",
+    "signature"
+  ],
+  "title": "ScoreReceipt",
+  "type": "object"
+}

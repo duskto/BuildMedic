@@ -1,0 +1,143 @@
+{
+  "$defs": {
+    "ScoreItem": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "maximum": 35,
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "task_id": {
+          "pattern": "^[a-f0-9]{32}$",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "case_id": {
+          "enum": [
+            "pagination",
+            "imports",
+            "signature"
+          ],
+          "title": "Case Id",
+          "type": "string"
+        },
+        "arm": {
+          "enum": [
+            "logs",
+            "standard",
+            "multi",
+            "adaptive"
+          ],
+          "title": "Arm",
+          "type": "string"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        },
+        "public_verified": {
+          "title": "Public Verified",
+          "type": "boolean"
+        },
+        "patch": {
+          "anyOf": [
+            {
+              "maxLength": 40000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Patch"
+        },
+        "patch_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Patch Sha256"
+        }
+      },
+      "required": [
+        "index",
+        "task_id",
+        "case_id",
+        "arm",
+        "snapshot_sha256",
+        "public_verified"
+      ],
+      "title": "ScoreItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-f0-9]{32}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "experiment_id": {
+      "pattern": "^[a-f0-9]{32}$",
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "report_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Report Sha256",
+      "type": "string"
+    },
+    "suite_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Suite Sha256",
+      "type": "string"
+    },
+    "image_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Image Digest",
+      "type": "string"
+    },
+    "dataset": {
+      "const": "public-development",
+      "default": "public-development",
+      "title": "Dataset",
+      "type": "string"
+    },
+    "rows": {
+      "items": {
+        "$ref": "#/$defs/ScoreItem"
+      },
+      "maxItems": 36,
+      "minItems": 1,
+      "title": "Rows",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "experiment_id",
+    "report_sha256",
+    "suite_sha256",
+    "image_digest",
+    "rows"
+  ],
+  "title": "ScoreRequest",
+  "type": "object"
+}

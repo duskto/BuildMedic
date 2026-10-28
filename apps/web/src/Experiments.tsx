@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { api } from "./api";
 import { healthSchema } from "./contracts";
+import { IndependentScore } from "./IndependentScore";
 
 const summarySchema = z.object({
   mode: z.enum(["logs", "standard", "multi", "adaptive"]),
@@ -374,7 +375,8 @@ export function ExperimentDetail() {
         </div>
       </div>
       <div className="notice info">
-        {item.scope}。未执行或失败的项目保留在总分母中；进行中数字为暂时结果。
+        以下为原公开报告口径，独立评分另列于页尾。{item.scope}
+        。未执行或失败的项目保留在总分母中；进行中数字为暂时结果。
       </div>
       <section className="panel padded">
         <h2>固定设置</h2>
@@ -564,6 +566,11 @@ export function ExperimentDetail() {
           </table>
         </div>
       </section>
+      <IndependentScore
+        id={item.id}
+        complete={item.status === "completed"}
+        protocol={item.manifest.schema_version}
+      />
     </>
   );
 }

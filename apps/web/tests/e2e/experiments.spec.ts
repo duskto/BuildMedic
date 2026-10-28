@@ -1,5 +1,23 @@
 import { test, expect } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/v1/health", (route) =>
+    route.fulfill({
+      json: {
+        request_id: "fixture",
+        data: {
+          model_ready: false,
+          model_id: null,
+          adaptive_ready: false,
+          adaptive_message: "fixture",
+          scoring_ready: false,
+          runner: { ready: false, message: "fixture", backend: null },
+        },
+      },
+    }),
+  );
+});
+
 const report = {
   id: "comparison-fixture",
   created_at: 1,
@@ -65,7 +83,12 @@ test("comparison shows actual counts, missing usage and task evidence without hi
   page,
 }) => {
   await page.route("**/api/v1/experiments/**", (route) =>
-    route.fulfill({ json: { data: report, request_id: "fixture" } }),
+    route.fulfill({
+      json: {
+        data: route.request().url().endsWith("/score") ? null : report,
+        request_id: "fixture",
+      },
+    }),
   );
   await page.goto("/experiments/comparison-fixture");
   await expect(
@@ -96,6 +119,8 @@ test("registering a comparison pins source hashes and equal budgets before any e
   let advanced = 0;
   await page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/score"))
+      return route.fulfill({ json: { data: null, request_id: "fixture" } });
     if (path.endsWith("/evaluation/cases"))
       return route.fulfill({
         json: {
@@ -224,7 +249,12 @@ test("four-arm view separates unscored log diagnoses from verified repairs", asy
     ],
   };
   await page.route("**/api/v1/experiments/**", (route) =>
-    route.fulfill({ json: { data: four, request_id: "fixture" } }),
+    route.fulfill({
+      json: {
+        data: route.request().url().endsWith("/score") ? null : four,
+        request_id: "fixture",
+      },
+    }),
   );
   await page.goto("/experiments/comparison-fixture");
   await expect(page.getByText("不适用；交付 1 份诊断")).toBeVisible();

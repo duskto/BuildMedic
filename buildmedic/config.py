@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     model_provider: Literal["compatible", "deepseek"] = "compatible"
     model_thinking: Literal["enabled", "disabled"] = "disabled"
     github_token: str = ""
+    scorer_url: str = ""
+    scorer_token: str = ""
+    scorer_suite_sha256: str = ""
     runner_profiles: Path | None = None
     adaptive_enabled: bool = False
     cookie_secure: bool = False
@@ -49,6 +52,16 @@ class Settings(BaseSettings):
     @property
     def agent_tools_ready(self):
         return self.model_ready and (self.model_provider != "deepseek" or self.model_thinking == "disabled")
+
+    @property
+    def scoring_ready(self):
+        import re
+
+        return bool(
+            self.scorer_url
+            and len(self.scorer_token) >= 32
+            and re.fullmatch(r"[a-f0-9]{64}", self.scorer_suite_sha256)
+        )
 
 
 @lru_cache

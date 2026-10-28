@@ -128,6 +128,18 @@ experiments = Table(
 )
 
 
+experiment_scores = Table(
+    "experiment_scores",
+    metadata,
+    Column("id", String(40), primary_key=True),
+    Column("experiment_id", String(40), nullable=False, unique=True),
+    Column("owner_id", String(80), nullable=False, index=True),
+    Column("status", String(20), nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("content", JSON, nullable=False),
+)
+
+
 def make_engine(url=None):
     settings().data_dir.mkdir(parents=True, exist_ok=True)
     url = url or settings().database_url

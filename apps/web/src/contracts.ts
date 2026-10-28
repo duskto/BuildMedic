@@ -343,6 +343,7 @@ export const caseSchema = z
   })
   .passthrough();
 export const healthSchema = z.object({
+  scoring_ready: z.boolean().optional(),
   model_ready: z.boolean(),
   model_id: z.string().nullable(),
   runner: z

@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import db, evaluation, experiences, store
+from . import db, evaluation, experiences, scoring, store
 from .cases import CASES, metadata
 from .clients import ModelClient, RunnerClient
 from .config import settings
@@ -140,6 +140,7 @@ async def health(request: Request):
             "adaptive_message": capability()["message"],
             "agent_tools_ready": settings().agent_tools_ready,
             "max_model_calls": settings().max_model_calls,
+            "scoring_ready": settings().scoring_ready,
         },
     )
 
@@ -349,6 +350,34 @@ def experiment_report(eid: str, request: Request):
         media_type="application/json",
         headers={
             "Content-Disposition": f'attachment; filename="experiment-{report["id"]}.json"',
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
+@app.post("/api/v1/experiments/{eid}/score", status_code=202)
+async def start_experiment_score(eid: str, request: Request):
+    if await request.body():
+        raise AppError("scoring_body_forbidden", "评分只使用服务端冻结材料，不接收客户端指标或私有路径", 422)
+    scoring.reserve(eid, request.state.owner)
+    return envelope(request, await scoring.get(eid, request.state.owner))
+
+
+@app.get("/api/v1/experiments/{eid}/score")
+async def get_experiment_score(eid: str, request: Request):
+    return envelope(request, await scoring.get(eid, request.state.owner))
+
+
+@app.get("/api/v1/experiments/{eid}/score/report")
+async def experiment_score_report(eid: str, request: Request):
+    result = await scoring.get(eid, request.state.owner)
+    if not result:
+        raise KeyError(eid)
+    return Response(
+        json.dumps(result, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="score-{result["id"]}.json"',
             "Cache-Control": "private, no-store",
         },
     )
