@@ -213,3 +213,147 @@ test("adaptive mode uses its shared budget and is disabled for remote logs", asy
   await expect(experience).toHaveCount(0);
   await expect(page.getByRole("radio", { name: /标准诊断/ })).toBeChecked();
 });
+
+test("only a registered remote Job enables adaptive repair and pins its attempt", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/health", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          model_ready: true,
+          model_id: "fixture",
+          runner: { ready: true, message: "fixture", backend: "docker" },
+          adaptive_ready: true,
+          adaptive_message: "fixture",
+        },
+        request_id: "fixture",
+      },
+    }),
+  );
+  await page.route("**/api/v1/ci/preview", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          repo: "owner/pytest-demo",
+          run_id: 42,
+          run_attempt: 2,
+          head_sha: "d".repeat(40),
+          execution_supported: true,
+          message: "按登记 Job 进行独立复现，本地通过不代表远端 CI 成功",
+          jobs: [
+            {
+              id: 17,
+              name: "pytest",
+              conclusion: "failure",
+              execution_supported: true,
+              profile_version: "registered-pytest-v1",
+              failed_steps: [],
+            },
+            {
+              id: 18,
+              name: "lint",
+              conclusion: "failure",
+              execution_supported: false,
+              profile_version: null,
+              failed_steps: [],
+            },
+          ],
+        },
+        request_id: "fixture",
+      },
+    }),
+  );
+  let captured: any;
+  await page.route("**/api/v1/tasks", async (route) => {
+    captured = route.request().postDataJSON();
+    await route.fulfill({
+      status: 409,
+      json: {
+        error: { code: "fixture", message: "已记录远程任务输入" },
+        request_id: "fixture",
+      },
+    });
+  });
+  await page.goto("/tasks/new");
+  await page
+    .getByRole("button", { name: "GitHub Actions", exact: true })
+    .click();
+  await page
+    .getByLabel("Actions Run URL")
+    .fill("https://github.com/owner/pytest-demo/actions/runs/42?attempt=2");
+  await page.getByRole("button", { name: "读取运行记录" }).click();
+  const mode = page.getByRole("radio", { name: /自适应诊断/ });
+  await expect(mode).toBeDisabled();
+  await page.getByRole("radio", { name: /pytest.*可独立复现/ }).check();
+  await expect(mode).toBeEnabled();
+  await mode.check();
+  await expect(
+    page.getByRole("checkbox", { name: /使用同域经验/ }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "开始诊断" }).click();
+  await expect(page.getByRole("alert")).toContainText("已记录远程任务输入");
+  expect(captured.source).toEqual({
+    type: "github_actions",
+    run_url: "https://github.com/owner/pytest-demo/actions/runs/42?attempt=2",
+    job_id: 17,
+    run_attempt: 2,
+  });
+  expect(captured.mode).toBe("adaptive");
+  expect(captured.experience).toBe(false);
+  await page.getByRole("radio", { name: /lint.*仅日志诊断/ }).check();
+  await expect(mode).toBeDisabled();
+  await expect(page.getByRole("radio", { name: /标准诊断/ })).toBeChecked();
+});
+
+test("agent tools are explicit and budgets reset when the mode changes", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/health", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          model_ready: true,
+          model_id: "fixture",
+          runner: { ready: true, message: "fixture", backend: "docker" },
+          adaptive_ready: true,
+          adaptive_message: "fixture",
+          agent_tools_ready: true,
+          max_model_calls: 32,
+        },
+        request_id: "fixture",
+      },
+    }),
+  );
+  let captured: any;
+  await page.route("**/api/v1/tasks", async (route) => {
+    captured = route.request().postDataJSON();
+    await route.fulfill({
+      status: 409,
+      json: {
+        error: { code: "fixture", message: "已记录工具任务" },
+        request_id: "fixture",
+      },
+    });
+  });
+  await page.goto("/tasks/new");
+  const tools = page.getByRole("checkbox", { name: /启用 Agent 工具诊断/ });
+  await expect(tools).not.toBeChecked();
+  await tools.check();
+  await expect(page.getByLabel("最多模型调用")).toHaveValue("16");
+  await expect(page.getByLabel("Token 上限")).toHaveValue("150000");
+  await page.getByRole("button", { name: "开始诊断" }).click();
+  await expect(page.getByRole("alert")).toContainText("已记录工具任务");
+  expect(captured.agent_tools).toBe(true);
+  expect(captured.limits.max_model_calls).toBe(16);
+  await page.getByRole("radio", { name: /自适应诊断/ }).check();
+  await expect(page.getByLabel("最多模型调用")).toHaveValue("24");
+  await expect(page.getByLabel("Token 上限")).toHaveValue("250000");
+  await page.getByRole("checkbox", { name: /使用同域经验/ }).check();
+  await expect(page.getByLabel("Token 上限")).toHaveValue("250000");
+  await tools.uncheck();
+  await expect(page.getByLabel("最多模型调用")).toHaveValue("12");
+  await expect(page.getByLabel("Token 上限")).toHaveValue("150000");
+  await page.getByRole("radio", { name: /标准诊断/ }).check();
+  await expect(page.getByLabel("Token 上限")).toHaveValue("100000");
+});

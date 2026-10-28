@@ -356,3 +356,73 @@ test("empty private experience library is useful on a mobile screen", async ({
     ),
   ).toBe(true);
 });
+
+test("agent tool records distinguish completed reads and rejected operations", async ({
+  page,
+}) => {
+  const task = {
+    ...snapshot(),
+    agent_tools: true,
+    agent_actions: [
+      {
+        id: "action-1",
+        name: "read_repo_file",
+        status: "completed",
+        model_call_id: "model-1",
+        rollout_id: "rollout-1",
+        round: 1,
+        started_at: 1,
+        finished_at: 2,
+        request_artifact_id: "tool-request",
+        result_artifact_id: "tool-result",
+      },
+      {
+        id: "action-2",
+        name: "run_check",
+        status: "rejected",
+        model_call_id: "model-1",
+        rollout_id: "rollout-1",
+        round: 1,
+        started_at: 1,
+        finished_at: 2,
+        request_artifact_id: "bad-request",
+        result_artifact_id: "bad-result",
+        error_code: "candidate_not_allowed",
+      },
+    ],
+  };
+  await page.route("**/api/v1/tasks/fixture-task", (route) =>
+    route.fulfill({ json: { data: task, request_id: "fixture" } }),
+  );
+  await page.route(
+    "**/api/v1/tasks/fixture-task/artifacts/tool-request",
+    (route) =>
+      route.fulfill({
+        body: '{"name":"read_repo_file","arguments":{"path":"src/demo.py"}}',
+        contentType: "application/json",
+      }),
+  );
+  await page.route(
+    "**/api/v1/tasks/fixture-task/artifacts/tool-result",
+    (route) =>
+      route.fulfill({
+        body: '{"ok":true,"result":{"evidence_ids":["ev-code-1"]}}',
+        contentType: "application/json",
+      }),
+  );
+  await page.goto("/tasks/fixture-task?tab=strategy");
+  await expect(
+    page.getByRole("heading", { name: "Agent 工具调用" }),
+  ).toBeVisible();
+  await expect(page.locator(".agent-action").nth(1)).toContainText("已拒绝");
+  await expect(page.locator(".agent-action").nth(1)).toContainText(
+    "candidate_not_allowed",
+  );
+  await page.getByRole("button", { name: "查看工具记录" }).first().click();
+  await expect(page.locator(".agent-action").first()).toContainText(
+    "src/demo.py",
+  );
+  await expect(page.locator(".agent-action").first()).toContainText(
+    "ev-code-1",
+  );
+});

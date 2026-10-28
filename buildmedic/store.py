@@ -77,6 +77,8 @@ def request_hash(body, parent_id=None):
     body = dict(body)
     if not body.get("experience"):
         body.pop("experience", None)  # Preserve idempotency hashes for pre-Library clients.
+    if not body.get("agent_tools"):
+        body.pop("agent_tools", None)
     return hashlib.sha256(
         json.dumps({"body": body, "parent_task_id": parent_id}, sort_keys=True).encode()
     ).hexdigest()
@@ -138,6 +140,7 @@ def create(owner, key, body, source_meta, parent_id=None):
             parent_task_id=parent_id,
             **source_meta,
             mode=body["mode"],
+            agent_tools=body.get("agent_tools", False),
             lifecycle="queued",
             phase="ingest",
             phase_history=["ingest"],
@@ -156,6 +159,7 @@ def create(owner, key, body, source_meta, parent_id=None):
             message="等待 Worker 领取任务",
             executions=[],
             model_calls=[],
+            agent_actions=[],
             usage={"calls": 0, "tokens": 0, "cost_usd": None, "usage_known": True},
             limits=body["limits"],
             artifacts=[],
@@ -317,7 +321,7 @@ def control(task_id, token):
 
 def close_open_records(snap, lifecycle):
     """A finished task cannot leave model calls or rollouts displayed as running."""
-    for record in [*snap.get("model_calls", []), *snap.get("rollouts", [])]:
+    for record in [*snap.get("model_calls", []), *snap.get("rollouts", []), *snap.get("agent_actions", [])]:
         if record["status"] in {"running", "response_received"}:
             record.update(
                 status="interrupted" if lifecycle != "cancelled" else "cancelled", finished_at=db.now()

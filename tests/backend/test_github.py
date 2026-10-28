@@ -148,3 +148,82 @@ def test_stream_limit_stops_before_consuming_the_response(kind, limit, code):
             await client.close()
 
     run(flow())
+
+
+def test_registered_job_preview_and_creation_pin_server_profile(registered_remote, client, monkeypatch):
+    from buildmedic import store
+
+    p, _ = registered_remote
+    head_repo = p.repository
+
+    def respond(request):
+        path = request.url.path
+        if path == f"/repos/{p.repository}":
+            return httpx.Response(200, json={"private": False, "full_name": p.repository})
+        if path.endswith("/jobs"):
+            return httpx.Response(
+                200,
+                json={
+                    "jobs": [
+                        {
+                            "id": 17,
+                            "run_id": 42,
+                            "run_attempt": 2,
+                            "head_sha": p.head_sha,
+                            "conclusion": "failure",
+                            "name": "pytest",
+                            "steps": [],
+                        },
+                        {
+                            "id": 18,
+                            "run_id": 42,
+                            "run_attempt": 2,
+                            "head_sha": p.head_sha,
+                            "conclusion": "failure",
+                            "name": "lint",
+                            "steps": [],
+                        },
+                    ]
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "id": 42,
+                "run_attempt": 2,
+                "head_sha": p.head_sha,
+                "path": p.workflow_path,
+                "head_repository": {"full_name": head_repo},
+            },
+        )
+
+    monkeypatch.setattr(
+        "buildmedic.api.GitHubClient", lambda: GitHubClient(transport=httpx.MockTransport(respond))
+    )
+    monkeypatch.setattr("buildmedic.api.capability", lambda: {"ready": True, "message": "test"})
+    url = f"https://github.com/{p.repository}/actions/runs/42?attempt=2"
+    preview = client.post("/api/v1/ci/preview", json={"run_url": url}).json()["data"]
+    assert preview["execution_supported"] is True
+    assert [j["execution_supported"] for j in preview["jobs"]] == [True, False]
+    body = {
+        "source": {"type": "github_actions", "run_url": url, "run_attempt": 2, "job_id": 17},
+        "mode": "adaptive",
+        "limits": {"max_model_calls": 12, "max_tokens": 100000},
+    }
+    response = client.post("/api/v1/tasks", json=body, headers={"Idempotency-Key": "registered-adaptive"})
+    assert response.status_code == 202, response.text
+    tid = response.json()["data"]["task_id"]
+    snap = store.snapshot(tid)
+    assert snap["runner_profile"] == p.binding()
+    assert snap["snapshot_sha256"] == p.snapshot_sha256
+    head_repo = "fork/pytest-demo"
+    assert not client.post("/api/v1/ci/preview", json={"run_url": url}).json()["data"]["execution_supported"]
+    assert (
+        client.post("/api/v1/tasks", json=body, headers={"Idempotency-Key": "registered-adaptive"}).json()[
+            "data"
+        ]["task_id"]
+        == tid
+    )
+    rejected = client.post("/api/v1/tasks", json=body, headers={"Idempotency-Key": "unregistered-fork"})
+    assert rejected.status_code == 422
+    assert rejected.json()["error"]["code"] == "adaptive_source_unsupported"

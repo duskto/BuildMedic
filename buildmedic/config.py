@@ -2,6 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,19 +26,29 @@ class Settings(BaseSettings):
     model_provider: Literal["compatible", "deepseek"] = "compatible"
     model_thinking: Literal["enabled", "disabled"] = "disabled"
     github_token: str = ""
+    runner_profiles: Path | None = None
     adaptive_enabled: bool = False
     cookie_secure: bool = False
     max_active_tasks: int = 2
     lease_seconds: int = 90
-    max_model_calls: int = 12
+    max_model_calls: int = 32
     max_output_tokens: int = 4096
     model_timeout_seconds: int = 90
     allowed_hosts: str = "localhost,127.0.0.1,testserver"
     web_dist: Path = ROOT / "apps/web/dist"
 
+    @field_validator("runner_profiles", mode="before")
+    @classmethod
+    def optional_profiles(cls, value):
+        return None if value == "" else value
+
     @property
     def model_ready(self):
         return bool(self.model_base_url and self.model_api_key and self.model_id)
+
+    @property
+    def agent_tools_ready(self):
+        return self.model_ready and (self.model_provider != "deepseek" or self.model_thinking == "disabled")
 
 
 @lru_cache

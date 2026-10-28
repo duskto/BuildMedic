@@ -2,7 +2,7 @@
 
 CI 失败诊断与补丁验证工作台。通过 React 页面创建任务，Python Worker 读取固定快照，在独立 Runner 复现失败、请求真实模型生成补丁，并用全新副本执行目标测试与完整回归。
 
-当前版本 `0.2.0` 已完成 P0 本地标准诊断验收：三个案例从浏览器提交，经真实 DeepSeek 生成修复，在 Docker 中独立验证通过。现已接通固定版本 Harness² 的本地自适应诊断；远程仓库执行仍待登记环境。
+当前版本 `0.2.0` 已完成 P0 本地标准诊断验收：三个案例从浏览器提交，经真实 DeepSeek 生成修复，在 Docker 中独立验证通过。已接通固定版本 Harness² 的自适应诊断与同域经验，并实现已登记远程提交的复现管线；真实远程失败 Run 的端到端验收仍待执行。
 
 ## 当前能力
 
@@ -14,7 +14,8 @@ CI 失败诊断与补丁验证工作台。通过 React 页面创建任务，Pyth
 - 补丁路径与范围校验、原始失败指纹检查、候选测试及最终独立验证；重新验证追加历史记录。
 - Harness² k=1 顺序优化：真实策略提议、4 个独立 rollout、组合策略差异与最终独立验收。
 - 真实模型的 Chat Completions 兼容接口；调用前预算预留、缺失用量标记、格式与证据引用校验。
-- GitHub Actions 公开仓库 Run 预览、固定 attempt 的失败 Job 分页读取及日志诊断。远程仓库尚未登记复现环境，因此不执行远程仓库代码。
+- 可选原生 Agent 工具循环：按需读取证据、检索源码、提交候选、请求固定检查并交付诊断；标准和 Harness² 共享预算与独立验收，见[工具说明](docs/agent-tools.md)。
+- GitHub Actions Run 预览与固定 attempt 的 Job 读取。已登记的仓库 / SHA / workflow / Job 可进入固定 Docker 环境，进行标准或自适应修复；未登记来源只做日志诊断。登记表默认留空，见[远程仓库接入](docs/remote.md)。
 
 ## 本地开发
 
@@ -119,7 +120,7 @@ npm run test:e2e
 
 后端日常测试中的模型是明确标注的测试替身，目标检查、回归和独立验证启动真实 pytest 子进程。另有显式运行的 `npm run test:live`，通过浏览器连接真实服务与模型，会产生模型用量；执行方式和结果见 [验证记录](docs/verification.md)。
 
-当前已验证：105 项后端检查、额外 3 项 Docker 回归、10 项 fixture 浏览器检查、标准、自适应与经验管理的真实模型页面验收及 TypeScript/Vite 生产构建。经验库默认关闭，开启后按会话和领域冻结输入，独立验证通过后手动发布。GitHub Actions 尚未触发远端验收；PostgreSQL/Redis 故障验收、登记远程仓库和离线对照评测继续推进。
+当前已验证：152 项日常后端检查、额外 13 项容器环境检查、13 项 fixture 浏览器检查、标准、自适应、经验管理与标准工具循环的真实模型页面验收及 TypeScript/Vite 生产构建。经验库默认关闭，开启后按会话和领域冻结输入，独立验证通过后手动发布。远程管线已有真实 Docker + 模拟 GitHub/模型的集成验收，尚未触发真实失败 Run 的远端验收；PostgreSQL/Redis 故障验收与离线对照评测继续推进。
 
 ## 工程入口
 
@@ -127,7 +128,9 @@ npm run test:e2e
 - `buildmedic/orchestration.py`：标准诊断、预算、取消与独立验收。
 - `scripts/check_model.py`：模型列表检查与显式的小额生成检查。
 - `buildmedic/adaptive.py`：原生 Harness² 调度与受限 HTTP 执行桥。
+- `buildmedic/agent_tools.py`：原生工具协议、任务内证据与候选检查循环。
 - `buildmedic/experiences.py`：同域经验版本、冻结输入和带证据的发布。
+- `buildmedic/profiles.py`、`buildmedic/snapshots.py`：登记配置、受限归档与固定提交缓存。
 - `buildmedic/worker.py`：outbox、Celery 与失效租约回收。
 - `buildmedic/runner.py`：内部固定检查执行服务。
 - `buildmedic/store.py`：快照、事件、产物、幂等与 fencing。
@@ -136,7 +139,8 @@ npm run test:e2e
 - `tests/`：后端和真实 Runner 集成。
 - `apps/web/tests/`：日常浏览器场景与独立的真实模型验收。
 - `scripts/migrate.py`：数据库升级与严格的旧库接管。
+- `scripts/register_profile.py`：下载固定提交并生成待核对的登记文件。
 
-[下一阶段与 Harness² 接入](docs/harness.md) · [任务经验管理](docs/experience.md) · [接口说明](docs/api.md) · [开发验证记录](docs/verification.md)
+[Harness² 接入](docs/harness.md) · [Agent 工具诊断](docs/agent-tools.md) · [远程仓库接入](docs/remote.md) · [任务经验管理](docs/experience.md) · [接口说明](docs/api.md) · [开发验证记录](docs/verification.md)
 
 开发指南、凭据、缓存、依赖目录和运行数据由 `.gitignore` 排除。此工作区已有本地 Git 元数据保存在 `.git-local`，在此工作区使用 `git --git-dir=.git-local ...`。

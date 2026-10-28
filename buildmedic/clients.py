@@ -7,6 +7,8 @@ import httpx
 
 from .config import settings
 from .errors import AppError, Blocked
+from .schemas import NativeAssistant
+from .security import sanitize
 
 
 class RunnerClient:
@@ -42,6 +44,30 @@ class RunnerClient:
         )
         response.raise_for_status()
         return response.json()
+
+    async def prepare(self, binding):
+        try:
+            response = await self.client.post("/runner/v1/snapshots", json=binding, timeout=60)
+            response.raise_for_status()
+            return response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise Blocked("Runner 无法准备登记快照，请检查 profile、固定镜像与归档指纹") from exc
+
+    async def submit_remote(self, execution_id, binding, check_id, patch):
+        try:
+            response = await self.client.post(
+                "/runner/v1/executions",
+                json={
+                    "execution_id": execution_id,
+                    "remote": binding,
+                    "check_id": check_id,
+                    "patch": patch,
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as exc:
+            raise Blocked("Runner 拒绝远程执行，请检查已登记 profile 与固定快照") from exc
 
     async def get(self, execution_id):
         response = await self.client.get(f"/runner/v1/executions/{execution_id}")
@@ -164,14 +190,58 @@ class ModelClient:
         }
 
     async def complete(self, messages):
+        message, usage = await self._chat(messages)
+        content = message.get("content")
+        if not isinstance(content, str):
+            raise AppError("model_format_error", "模型服务响应格式不合法", 502)
+        if not content.strip():
+            raise AppError("model_empty_response", "模型返回空内容，请重新诊断", 502, True)
+        try:
+            content.encode("utf-8")
+        except UnicodeError as exc:
+            raise AppError("model_format_error", "模型返回的文本编码无效", 502) from exc
+        return content, usage
+
+    async def tool_turn(self, messages, tools):
+        cfg = self.configuration()
+        if cfg.model_provider == "deepseek" and cfg.model_thinking != "disabled":
+            raise Blocked("工具诊断需要关闭 DeepSeek 思考模式；平台不保存或回传私有思维链")
+        message, usage = await self._chat(messages, tools=tools)
+        try:
+            calls = message.get("tool_calls") or []
+            if not isinstance(calls, list) or len(calls) > 8:
+                raise ValueError("Invalid tool batch")
+            frame = NativeAssistant.model_validate(
+                {
+                    "tool_calls": [
+                        {
+                            "id": call["id"],
+                            "type": call["type"],
+                            "function": {
+                                "name": call["function"]["name"],
+                                "arguments": call["function"]["arguments"],
+                            },
+                        }
+                        for call in calls
+                    ]
+                }
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise AppError("model_format_error", "模型工具响应结构无效，未执行工具", 502) from exc
+        return frame.model_dump(), usage
+
+    async def _chat(self, messages, tools=None):
         cfg = self.configuration()
         self.metadata = {}
         body = {
             "model": cfg.model_id,
             "messages": messages,
             "max_tokens": cfg.max_output_tokens,
-            "response_format": {"type": "json_object"},
         }
+        if tools is None:
+            body["response_format"] = {"type": "json_object"}
+        else:
+            body.update(tools=tools, tool_choice="auto")
         if cfg.model_provider == "deepseek":
             body["thinking"] = {"type": cfg.model_thinking}
         data = await self.request_json("POST", "/chat/completions", body)
@@ -184,19 +254,20 @@ class ModelClient:
                     "response_id": data.get("id"),
                     "finish_reason": choice.get("finish_reason"),
                 }.items()
-                if isinstance(value, str) and len(value) <= 200
+                if isinstance(value, str)
+                and len(value) <= 200
+                and value.isascii()
+                and sanitize(value) == value
             }
             if choice.get("finish_reason") == "length":
                 raise AppError(
                     "model_output_truncated", "模型输出被截断，请提高输出上限或关闭思考模式后重试", 502
                 )
-            if choice.get("finish_reason") in {"content_filter", "insufficient_system_resource"}:
+            if choice.get("finish_reason") in {"content_filter", "insufficient_system_resource", "aborted"}:
                 raise AppError("model_generation_stopped", "模型服务未完成生成，请稍后重试", 502, True)
-            content = choice["message"]["content"]
-            if not isinstance(content, str):
-                raise TypeError("empty model content")
-            if not content.strip():
-                raise AppError("model_empty_response", "模型返回空内容，请重新诊断", 502, True)
-            return content, data.get("usage")
+            message = choice["message"]
+            if not isinstance(message, dict):
+                raise TypeError("Invalid message")
+            return message, data.get("usage")
         except (KeyError, IndexError, ValueError, TypeError) as exc:
             raise AppError("model_format_error", "模型服务响应格式不合法", 502) from exc

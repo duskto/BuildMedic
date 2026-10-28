@@ -9,9 +9,22 @@ from .security import safe_path
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$")
 
 
+def editable_source(path):
+    path = Path(path)
+    return (
+        bool(path.parts)
+        and path.parts[0] == "src"
+        and path.suffix == ".py"
+        and not {"tests", "test"}.intersection(path.parts)
+        and path.name not in {"conftest.py", "test.py", "tests.py"}
+        and not path.name.startswith("test_")
+        and not path.name.endswith("_test.py")
+    )
+
+
 def source_target(root, value):
     path = safe_path(value)
-    if not path.parts or path.parts[0] != "src" or path.suffix != ".py":
+    if not editable_source(path):
         raise ValueError("仅允许修改 src/ 下已有 Python 文件")
     target = root / path
     if any(p.is_symlink() for p in [target, *target.parents]) or not target.is_file():
@@ -70,7 +83,7 @@ def apply_patch(root: Path, patch: str):
         old = lines[i][6:].strip()
         new = lines[i + 1][6:].strip()
         path = safe_path(new)
-        if old != new or path.parts[0] != "src" or path.suffix != ".py" or str(path) in changes:
+        if old != new or not editable_source(path) or str(path) in changes:
             raise ValueError("仅允许修改 src/ 下已有 Python 文件，不能重命名或修改测试")
         target = source_target(root, new)
         original = target.read_text().splitlines(keepends=True)

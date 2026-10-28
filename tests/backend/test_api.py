@@ -165,8 +165,13 @@ def test_adaptive_creation_requires_real_capability_and_enough_budget(client, mo
     )
 
 
-def test_adaptive_rejects_remote_source_before_network_access(client, monkeypatch):
+def test_adaptive_rejects_remote_source_without_registered_profile(client, monkeypatch):
     monkeypatch.setattr("buildmedic.api.capability", lambda: {"ready": True, "message": "test capability"})
+
+    async def metadata(_body):
+        return {"runner_profile": None}
+
+    monkeypatch.setattr("buildmedic.api.source_metadata", metadata)
     body = {
         "source": {
             "type": "github_actions",

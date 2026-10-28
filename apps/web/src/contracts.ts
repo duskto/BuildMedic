@@ -206,8 +206,32 @@ export const taskSchema = z
     run_attempt: z.number().nullable(),
     job_id: z.number().nullable(),
     profile_version: z.string().nullable(),
+    runner_profile: z
+      .object({
+        profile_id: z.string(),
+        profile_hash: z.string(),
+        repository: z.string(),
+        head_sha: z.string(),
+        snapshot_sha256: z.string(),
+      })
+      .nullable()
+      .optional(),
+    source_snapshot: z
+      .object({
+        profile_id: z.string(),
+        profile_hash: z.string(),
+        repository: z.string(),
+        head_sha: z.string(),
+        snapshot_sha256: z.string(),
+        archive_sha256: z.string(),
+        manifest_artifact_id: z.string(),
+        profile_artifact_id: z.string().optional(),
+      })
+      .nullable()
+      .optional(),
     execution_label: z.string(),
     mode: z.enum(["standard", "adaptive"]),
+    agent_tools: z.boolean().optional(),
     lifecycle: lifecycleSchema,
     phase: phaseSchema,
     phase_history: z.array(phaseSchema).optional(),
@@ -240,6 +264,23 @@ export const taskSchema = z
     validations: z.array(validationSchema),
     executions: z.array(executionSchema),
     model_calls: z.array(modelCallSchema).optional(),
+    agent_actions: z
+      .array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          status: z.string(),
+          model_call_id: z.string(),
+          rollout_id: z.string(),
+          round: z.number(),
+          started_at: z.number(),
+          finished_at: z.number().optional(),
+          request_artifact_id: z.string(),
+          result_artifact_id: z.string().optional(),
+          error_code: z.string().nullable().optional(),
+        }),
+      )
+      .optional(),
     harness2_sha: z.string().nullable().optional(),
     harness: harnessSchema.nullable().optional(),
     experience: experienceSchema.nullable().optional(),
@@ -304,6 +345,8 @@ export const healthSchema = z.object({
     .passthrough(),
   adaptive_ready: z.boolean(),
   adaptive_message: z.string(),
+  agent_tools_ready: z.boolean().optional(),
+  max_model_calls: z.number().optional(),
 });
 export const modelCheckSchema = z.object({
   provider: z.string(),
@@ -324,6 +367,8 @@ export const previewSchema = z.object({
       id: z.number(),
       name: z.string(),
       conclusion: z.string(),
+      execution_supported: z.boolean().optional(),
+      profile_version: z.string().nullable().optional(),
       failed_steps: z.array(z.object({ number: z.number(), name: z.string() })),
     }),
   ),

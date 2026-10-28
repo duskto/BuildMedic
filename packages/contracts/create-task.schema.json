@@ -12,14 +12,14 @@
         },
         "max_model_calls": {
           "default": 8,
-          "maximum": 12,
+          "maximum": 32,
           "minimum": 1,
           "title": "Max Model Calls",
           "type": "integer"
         },
         "max_tokens": {
           "default": 48000,
-          "maximum": 150000,
+          "maximum": 250000,
           "minimum": 8192,
           "title": "Max Tokens",
           "type": "integer"
@@ -114,6 +114,11 @@
     "experience": {
       "default": false,
       "title": "Experience",
+      "type": "boolean"
+    },
+    "agent_tools": {
+      "default": false,
+      "title": "Agent Tools",
       "type": "boolean"
     }
   },

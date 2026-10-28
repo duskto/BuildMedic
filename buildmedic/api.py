@@ -20,6 +20,7 @@ from .database import require_schema
 from .errors import AppError, Blocked
 from .github import GitHubClient
 from .harness_support import capability
+from .profiles import match_profile
 from .schemas import CreateTask, Envelope, Lifecycle, Preview, TaskPage, TaskSnapshot, ValidationRequest
 from .security import read_owner, sanitize, sign_owner
 
@@ -98,6 +99,11 @@ async def conflict(request, exc):
     return error_response(request, "conflict", str(exc), 409)
 
 
+@app.exception_handler(Blocked)
+def environment_unavailable(request, exc):
+    return error_response(request, "environment_unavailable", str(exc), 503)
+
+
 @app.exception_handler(KeyError)
 async def not_found(request, _exc):
     return error_response(request, "not_found", "任务或产物不存在", 404)
@@ -132,6 +138,8 @@ async def health(request: Request):
             "runner": value,
             "adaptive_ready": capability()["ready"],
             "adaptive_message": capability()["message"],
+            "agent_tools_ready": settings().agent_tools_ready,
+            "max_model_calls": settings().max_model_calls,
         },
     )
 
@@ -207,12 +215,25 @@ async def source_metadata(body):
     selected = next((job for job in preview["jobs"] if job["id"] == body.source.job_id), None)
     if not selected:
         raise AppError("invalid_job", "所选失败 Job 不属于固定 Run attempt", 422)
+    profile = match_profile(
+        preview["repo"],
+        preview["head_sha"],
+        preview.get("workflow_path"),
+        selected["name"],
+        preview.get("head_repository"),
+    )
     return {key: preview[key] for key in ("repo", "run_id", "run_attempt", "head_sha", "profile_version")} | {
         "job_id": selected["id"],
         "title": selected["name"],
         "source_type": "github_actions",
         "case_id": None,
-        "execution_label": "GitHub 失败日志诊断 · 尚未登记执行环境",
+        "execution_label": "固定 GitHub SHA · 登记环境本地验证"
+        if profile
+        else "GitHub 失败日志诊断 · 尚未登记执行环境",
+        "runner_profile": profile.binding() if profile else None,
+        "profile_version": profile.id if profile else None,
+        "snapshot_sha256": profile.snapshot_sha256 if profile else None,
+        "workflow_path": profile.workflow_path if profile else preview.get("workflow_path"),
     }
 
 
@@ -222,13 +243,25 @@ def require_key(key):
 
 
 def check_mode(body):
+    if body.limits.max_model_calls > settings().max_model_calls:
+        raise AppError("platform_budget_exceeded", "请求调用预算超过当前服务端上限", 422)
+    if body.agent_tools:
+        if not settings().agent_tools_ready:
+            raise AppError(
+                "agent_tools_unavailable",
+                "工具诊断需配置兼容 Function Calling 的模型，DeepSeek 需关闭思考模式",
+                422,
+            )
+        minimum = (12 if body.experience else 11) if body.mode == "adaptive" else 4
+        if body.limits.max_model_calls < minimum or body.limits.max_tokens < 24000:
+            raise AppError(
+                "agent_budget_too_small", f"当前工具模式至少需要 {minimum} 次调用和 24,000 Token 预算", 422
+            )
     if body.mode != "adaptive":
         return
     status = capability()
     if not status["ready"]:
         raise AppError("adaptive_unavailable", status["message"], 422)
-    if body.source.type != "demo":
-        raise AppError("adaptive_source_unsupported", "自适应诊断目前仅支持登记的演示案例", 422)
     calls = 8 if body.experience else 7
     recommended = "150,000（含经验反思）" if body.experience else "100,000"
     if body.limits.max_model_calls < calls or body.limits.max_tokens < 48000:
@@ -246,6 +279,14 @@ async def create_task(request: Request, body: CreateTask, idempotency_key: str =
     if tid is None:
         check_mode(body)
         meta = await source_metadata(body)
+        if body.agent_tools and body.source.type == "github_actions" and not meta.get("runner_profile"):
+            raise AppError("agent_tools_unavailable", "所选 Job 仅支持日志诊断，尚未登记工具执行环境", 422)
+        if (
+            body.mode == "adaptive"
+            and body.source.type == "github_actions"
+            and not meta.get("runner_profile")
+        ):
+            raise AppError("adaptive_source_unsupported", "所选 Job 的仓库、SHA 和复现环境尚未登记", 422)
         tid = store.create(request.state.owner, idempotency_key, body.model_dump(), meta)
     return envelope(
         request,
@@ -283,6 +324,17 @@ async def retry_task(tid: str, request: Request, idempotency_key: str = Header(d
     if new_id is None:
         check_mode(body)
         meta = await source_metadata(body)
+        if body.agent_tools and body.source.type == "github_actions" and not meta.get("runner_profile"):
+            raise AppError("agent_tools_unavailable", "所选 Job 尚未登记工具执行环境", 422)
+        if (
+            body.mode == "adaptive"
+            and body.source.type == "github_actions"
+            and not meta.get("runner_profile")
+        ):
+            raise AppError("adaptive_source_unsupported", "所选 Job 的复现环境尚未登记", 422)
+        parent = store.snapshot(tid, request.state.owner)
+        if parent.get("runner_profile") and meta.get("runner_profile") != parent["runner_profile"]:
+            raise AppError("profile_changed", "原任务的登记 profile 已变化，请创建新的诊断", 422)
         new_id = store.create(request.state.owner, idempotency_key, body.model_dump(), meta, parent_id=tid)
     return envelope(request, {"task_id": new_id, "detail_url": f"/tasks/{new_id}"})
 

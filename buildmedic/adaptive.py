@@ -22,12 +22,10 @@ from harness2.substrate.opencode import OPENCODE_SURFACE
 from pydantic import Field, ValidationError
 
 from . import db, store
-from .cases import CASES, case_dir
 from .config import HARNESS_SHA, ROOT, settings
-from .errors import AppError, BudgetExceeded, Cancelled
+from .errors import AppError, Blocked, BudgetExceeded, Cancelled
 from .experiences import Reflection, get_snapshot, profile_hash
 from .orchestration import validate
-from .patching import apply_patch, patch_from_edits
 from .schemas import StrictModel
 from .security import sanitize
 
@@ -155,7 +153,7 @@ class AsyncBridge:
                 try:
                     self.ctx.guard()
                     return await factory()
-                except (Cancelled, BudgetExceeded, store.LostLease) as exc:
+                except (Cancelled, BudgetExceeded, Blocked, store.LostLease) as exc:
                     self.halt = exc
                     raise
                 except AppError as exc:
@@ -170,7 +168,7 @@ class AsyncBridge:
 
         try:
             return asyncio.run_coroutine_threadsafe(serialized(), self.loop).result()
-        except (Cancelled, BudgetExceeded, store.LostLease) as exc:
+        except (Cancelled, BudgetExceeded, Blocked, store.LostLease) as exc:
             raise HarnessHalt(exc) from exc
         except AppError as exc:
             if exc.code not in {
@@ -216,7 +214,7 @@ class CIRepairAdapter:
         return [self.ctx.id]
 
     def domain_of(self, task_id):
-        return CASES[self.case_id]["category"]
+        return self.ctx.domain(self.case_id)
 
     def task_prompt(self, task_id):
         return "基于固定日志与源码诊断失败，交付带证据的 JSON 诊断与最小源码编辑。不得更改测试和平台约束。"
@@ -250,7 +248,7 @@ class CIRepairAdapter:
         dest = self.root / "rollouts" / hashlib.sha256(run_id.encode()).hexdigest()[:20]
         dest.mkdir(parents=True)
         shutil.copytree(
-            case_dir(self.case_id),
+            self.ctx.source_root(self.case_id),
             dest / "workspace",
             ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"),
         )
@@ -282,25 +280,22 @@ class CIRepairAdapter:
         self.ctx.phase("diagnose", f"Harness² {label}：在独立工作区执行诊断")
         try:
             diagnosis = await self.ctx.diagnose(
-                self.materials, strategy=tree, label=label, harness_hash=fingerprint
+                self.materials, strategy=tree, label=label, harness_hash=fingerprint, rollout_id=rollout_id
             )
             record["diagnosis"] = diagnosis.model_dump(exclude={"patch", "edits"})
+            if self.ctx.body.get("agent_tools"):
+                snapshot = store.snapshot(self.ctx.id)
+                record["tool_activity"] = [
+                    {key: action.get(key) for key in ("name", "round", "status", "error_code")}
+                    for action in snapshot["agent_actions"]
+                    if action["rollout_id"] == rollout_id
+                ]
+                record["diagnosis_evidence"] = [
+                    e for e in snapshot["evidence"] if e["id"] in diagnosis.root_cause.evidence_ids
+                ]
             (dest / "diagnosis.json").write_text(diagnosis.model_dump_json(indent=2))
             if diagnosis.patch or diagnosis.edits:
-                patch = diagnosis.patch or patch_from_edits(dest / "workspace", diagnosis.edits)
-                files = apply_patch(dest / "workspace", patch)
-                part = self.ctx.artifact("patch", patch, redact=False)
-                candidate = {
-                    "id": store.uid(),
-                    "rollout_id": rollout_id,
-                    "patch_artifact_id": part["id"],
-                    "patch_hash": part["sha256"],
-                    "explanation": diagnosis.summary,
-                    "files": files,
-                    "selected": False,
-                    "delivery_format": "exact_edits" if diagnosis.edits else "unified_diff",
-                }
-                self.ctx.update("patch.created", transform=lambda s: s["candidates"].append(candidate))
+                candidate, _ = self.ctx.deliver_candidate(dest / "workspace", diagnosis, rollout_id)
                 record["candidate"] = candidate
                 self.ctx.phase("validate", f"独立检查 Harness² 候选 {label}")
                 result, output = await validate(
@@ -375,6 +370,8 @@ class CIRepairAdapter:
             "output": record.get("observation", ""),
             "output_truncated": record.get("observation_truncated", False),
             "error": record.get("error", ""),
+            "tool_activity": record.get("tool_activity", []),
+            "diagnosis_evidence": record.get("diagnosis_evidence", []),
         }
         return "[ACTION] Bounded model diagnosis and independent Runner checks\n[OBSERVATION]\n" + json.dumps(
             observation, ensure_ascii=False, separators=(",", ":")

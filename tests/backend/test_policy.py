@@ -101,6 +101,29 @@ def test_duplicate_claim_and_expired_fence():
         store.heartbeat(tid, token)
 
 
+def test_tests_inside_src_are_readonly_and_in_the_protected_inventory(tmp_path):
+    from buildmedic.snapshots import protected_hash
+
+    paths = [
+        "src/demo/conftest.py",
+        "src/demo/test_boundary.py",
+        "src/demo/boundary_test.py",
+        "src/demo/tests/helpers.py",
+        "src/demo/tests.py",
+    ]
+    for name in paths:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("assert False\n")
+    original = protected_hash(tmp_path)
+    for name in paths:
+        with pytest.raises(ValueError):
+            patch_from_edits(tmp_path, [SourceEdit(path=name, before="assert False", after="pass")])
+    assert protected_hash(tmp_path) == original
+    (tmp_path / paths[0]).write_text("pass\n")
+    assert protected_hash(tmp_path) != original
+
+
 def test_repaired_requires_independent_evidence():
     tid = store.create(
         "owner",

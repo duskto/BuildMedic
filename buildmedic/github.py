@@ -8,6 +8,7 @@ import httpx
 
 from .config import settings
 from .errors import AppError
+from .profiles import match_profile, registry
 from .security import sanitize
 
 RUN_PATH = re.compile(r"^/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/actions/runs/([1-9][0-9]*)/?$")
@@ -111,6 +112,9 @@ class GitHubClient:
         ):
             raise AppError("github_inconsistent", "GitHub 返回的运行版本不一致", 502)
         jobs = []
+        profiles = registry().profiles
+        head_repo = (fixed.get("head_repository") or run.get("head_repository") or {}).get("full_name")
+        workflow_path = fixed.get("path")
         for page in range(1, 101):
             data = await self.get(
                 f"/repos/{repo}/actions/runs/{run_id}/attempts/{attempt}/jobs",
@@ -125,11 +129,16 @@ class GitHubClient:
                 ):
                     raise AppError("github_inconsistent", "Job 与固定运行版本不一致", 502)
                 if job.get("conclusion") in {"failure", "timed_out", "action_required", "startup_failure"}:
+                    profile = match_profile(
+                        repo, fixed["head_sha"], workflow_path, job["name"], head_repo, candidates=profiles
+                    )
                     jobs.append(
                         {
                             "id": job["id"],
                             "name": sanitize(job["name"]),
                             "conclusion": job["conclusion"],
+                            "execution_supported": profile is not None,
+                            "profile_version": profile.id if profile else None,
                             "failed_steps": [
                                 {"number": s["number"], "name": sanitize(s["name"])}
                                 for s in job.get("steps", [])
@@ -148,8 +157,12 @@ class GitHubClient:
             "head_sha": fixed["head_sha"],
             "jobs": jobs,
             "profile_version": None,
-            "execution_supported": False,
-            "message": "尚未登记复现环境，可进行日志诊断；不能自动执行或验证该仓库",
+            "execution_supported": any(j["execution_supported"] for j in jobs),
+            "head_repository": head_repo,
+            "workflow_path": workflow_path,
+            "message": "按所选 Job 的登记状态进行独立复现或仅日志诊断；本地验证不代表远端 CI 成功"
+            if any(j["execution_supported"] for j in jobs)
+            else "尚未登记复现环境，可进行日志诊断；不能自动执行或验证该仓库",
         }
 
     async def logs(self, repo, job_id):

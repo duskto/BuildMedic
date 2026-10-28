@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { z } from "zod";
 import { api, artifactUrl, readArtifact } from "./api";
+import { AgentActions } from "./AgentActions";
 import {
   ExperienceLibrary,
   ExperienceDetail,
@@ -556,6 +557,7 @@ function NewTask() {
   const [maxTokens, setMaxTokens] = useState(48000);
   const [mode, setMode] = useState<"standard" | "adaptive">("standard");
   const [experience, setExperience] = useState(false);
+  const [agentTools, setAgentTools] = useState(false);
   const key = useRef(crypto.randomUUID());
   const cases = useQuery({
     queryKey: ["cases"],
@@ -571,10 +573,19 @@ function NewTask() {
         method: "POST",
         body: JSON.stringify({ run_url: url }),
       }),
-    onSuccess: (data) =>
-      setJobId(data.jobs.length === 1 ? data.jobs[0].id : null),
+    onSuccess: (data) => {
+      setJobId(data.jobs.length === 1 ? data.jobs[0].id : null);
+      setMode("standard");
+      setAgentTools(false);
+      setMaxCalls(Math.min(maxCalls, 12));
+      setMaxTokens(Math.min(maxTokens, 100000));
+      changed();
+    },
   });
   const item = cases.data?.find((c) => c.id === selected);
+  const selectedJob = preview.data?.jobs.find((job) => job.id === jobId);
+  const registeredSource =
+    source === "demo" || selectedJob?.execution_supported === true;
   const create = useMutation({
     mutationFn: () =>
       api("/tasks", z.object({ task_id: z.string() }), {
@@ -592,6 +603,7 @@ function NewTask() {
                 },
           mode,
           experience,
+          agent_tools: agentTools,
           limits: {
             max_wall_seconds: seconds,
             max_model_calls: maxCalls,
@@ -645,6 +657,8 @@ function NewTask() {
                 onClick={() => {
                   setSource("github");
                   setExperience(false);
+                  setAgentTools(false);
+                  setMaxCalls(Math.min(maxCalls, 12));
                   setMaxTokens(Math.min(maxTokens, 100000));
                   setMode("standard");
                   changed();
@@ -699,6 +713,10 @@ function NewTask() {
                     setUrl(e.target.value);
                     preview.reset();
                     setJobId(null);
+                    setMode("standard");
+                    setAgentTools(false);
+                    setMaxCalls(Math.min(maxCalls, 12));
+                    setMaxTokens(Math.min(maxTokens, 100000));
                     changed();
                   }}
                 />
@@ -736,11 +754,22 @@ function NewTask() {
                             checked={jobId === j.id}
                             onChange={() => {
                               setJobId(j.id);
+                              if (!j.execution_supported) {
+                                setMode("standard");
+                                setAgentTools(false);
+                                setMaxCalls(Math.min(maxCalls, 12));
+                                setMaxTokens(Math.min(maxTokens, 100000));
+                              }
                               changed();
                             }}
                           />
                           <span>
                             <strong>{j.name}</strong>
+                            <small>
+                              {j.execution_supported
+                                ? `可独立复现 · ${j.profile_version}`
+                                : "仅日志诊断 · 尚未登记"}
+                            </small>
                             <small>
                               {j.failed_steps
                                 .map((s) => `Step ${s.number}: ${s.name}`)
@@ -771,7 +800,10 @@ function NewTask() {
                 onClick={() => {
                   setMode("standard");
                   setExperience(false);
-                  setMaxTokens(Math.min(maxTokens, 100000));
+                  setMaxCalls(agentTools ? 16 : Math.min(maxCalls, 12));
+                  setMaxTokens(
+                    agentTools ? 150000 : Math.min(maxTokens, 100000),
+                  );
                   changed();
                 }}
               >
@@ -788,12 +820,12 @@ function NewTask() {
                 type="button"
                 role="radio"
                 aria-checked={mode === "adaptive"}
-                disabled={!health.data?.adaptive_ready || source !== "demo"}
+                disabled={!health.data?.adaptive_ready || !registeredSource}
                 className={`mode-card ${mode === "adaptive" ? "selected" : ""}`}
                 onClick={() => {
                   setMode("adaptive");
-                  setMaxCalls(12);
-                  setMaxTokens(100000);
+                  setMaxCalls(agentTools ? 24 : 12);
+                  setMaxTokens(agentTools ? 250000 : 100000);
                   changed();
                 }}
               >
@@ -806,7 +838,7 @@ function NewTask() {
                     <Check size={17} />
                   ) : (
                     <span className="small-tag">
-                      {health.data?.adaptive_ready && source === "demo"
+                      {health.data?.adaptive_ready && registeredSource
                         ? "Harness²"
                         : "未就绪"}
                     </span>
@@ -818,7 +850,7 @@ function NewTask() {
                 </p>
               </button>
             </div>
-            {mode === "adaptive" && (
+            {mode === "adaptive" && source === "demo" && (
               <label className="experience-option">
                 <input
                   type="checkbox"
@@ -826,10 +858,12 @@ function NewTask() {
                   onChange={(e) => {
                     setExperience(e.target.checked);
                     if (e.target.checked) {
-                      setMaxCalls(12);
-                      setMaxTokens(150000);
+                      setMaxCalls(agentTools ? 24 : 12);
+                      setMaxTokens(agentTools ? 250000 : 150000);
                     } else {
-                      setMaxTokens(Math.min(maxTokens, 100000));
+                      setMaxTokens(
+                        Math.min(maxTokens, agentTools ? 250000 : 100000),
+                      );
                     }
                     changed();
                   }}
@@ -847,12 +881,53 @@ function NewTask() {
             {mode === "adaptive" && (
               <div className="notice info">
                 已启用 Harness² k=1
-                顺序优化，全部调用共享预算。仅支持登记的演示案例；不会自动发布跨任务经验。
+                顺序优化，全部调用共享预算。支持登记的案例和固定提交
+                Job；不会自动发布跨任务经验。
               </div>
             )}
             {!health.data?.adaptive_ready && (
               <p className="small-note">{health.data?.adaptive_message}</p>
             )}
+            <label className="experience-option">
+              <input
+                type="checkbox"
+                checked={agentTools}
+                disabled={!registeredSource || !health.data?.agent_tools_ready}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  setAgentTools(enabled);
+                  setMaxCalls(
+                    enabled
+                      ? mode === "adaptive"
+                        ? 24
+                        : 16
+                      : mode === "adaptive"
+                        ? 12
+                        : 8,
+                  );
+                  setMaxTokens(
+                    enabled
+                      ? mode === "adaptive"
+                        ? 250000
+                        : 150000
+                      : experience
+                        ? 150000
+                        : mode === "adaptive"
+                          ? 100000
+                          : 48000,
+                  );
+                  changed();
+                }}
+              />
+              <span>
+                <strong>启用 Agent 工具诊断</strong>
+                <small>
+                  按需读日志、检索源码、提交候选并请求登记检查。每轮最多 6
+                  次模型调用、2
+                  次工具测试，共享任务预算；需兼容工具调用的模型和已登记来源。
+                </small>
+              </span>
+            </label>
             <div className="budget-fields">
               <label>
                 最长运行时间
@@ -885,6 +960,16 @@ function NewTask() {
                   </option>
                   <option value={8}>8 次</option>
                   <option value={12}>12 次</option>
+                  {agentTools &&
+                    [16, 24, 32].map((value) => (
+                      <option
+                        key={value}
+                        value={value}
+                        disabled={value > (health.data?.max_model_calls ?? 12)}
+                      >
+                        {value} 次（含工具交互）
+                      </option>
+                    ))}
                 </select>
               </label>
               <label>
@@ -901,8 +986,13 @@ function NewTask() {
                   </option>
                   <option value={48000}>48,000</option>
                   <option value={100000}>100,000</option>
-                  {experience && (
-                    <option value={150000}>150,000（含经验反思）</option>
+                  {(experience || agentTools) && (
+                    <option value={150000}>
+                      150,000（{agentTools ? "含工具交互" : "含经验反思"}）
+                    </option>
+                  )}
+                  {agentTools && (
+                    <option value={250000}>250,000（含工具交互）</option>
                   )}
                 </select>
               </label>
@@ -949,7 +1039,9 @@ function NewTask() {
               </dd>
               <dt>复现 Profile</dt>
               <dd className="mono">
-                {source === "demo" ? item?.profile_version : "尚未登记"}
+                {source === "demo"
+                  ? item?.profile_version
+                  : (selectedJob?.profile_version ?? "尚未登记")}
               </dd>
             </dl>
             <div className="small-note">
@@ -1138,6 +1230,9 @@ function useTask(id: string) {
       "experience.available",
       "experience.unverified",
       "experience.published",
+      "snapshot.prepared",
+      "agent.tool_started",
+      "agent.tool_finished",
       "worker.lost",
       "task.cancelling",
       "task.finished",
@@ -1411,6 +1506,46 @@ function TaskDetail() {
               </dd>
               <dt>复现 Profile</dt>
               <dd className="mono">{task.profile_version ?? "尚未登记"}</dd>
+              {task.source_snapshot && (
+                <>
+                  <dt>远程源码清单 SHA256</dt>
+                  <dd className="mono break-all">
+                    {task.source_snapshot.snapshot_sha256}
+                  </dd>
+                  <dt>Profile 指纹</dt>
+                  <dd className="mono break-all">
+                    {task.source_snapshot.profile_hash}
+                  </dd>
+                  <dt>固定快照归档</dt>
+                  <dd>
+                    <a
+                      className="text-link"
+                      href={artifactUrl(
+                        task.id,
+                        task.source_snapshot.manifest_artifact_id,
+                        true,
+                      )}
+                    >
+                      下载完整性清单
+                    </a>
+                    {task.source_snapshot.profile_artifact_id && (
+                      <>
+                        <br />
+                        <a
+                          className="text-link"
+                          href={artifactUrl(
+                            task.id,
+                            task.source_snapshot.profile_artifact_id,
+                            true,
+                          )}
+                        >
+                          下载登记环境
+                        </a>
+                      </>
+                    )}
+                  </dd>
+                </>
+              )}
               <dt>请求模型</dt>
               <dd className="mono break-all">
                 {task.usage.model ?? "尚未调用"}
@@ -1965,10 +2100,13 @@ function StrategyPanel({ task }: { task: Task }) {
       </div>
       {task.harness && <HarnessDetails task={task} />}
       {task.experience && <TaskExperience key={task.id} task={task} />}
+      {task.agent_tools && <AgentActions task={task} />}
       {(task.model_calls?.length ?? 0) > 0 && (
         <div className="content-section">
           <h3>模型调用记录</h3>
-          <p>响应通过校验表示诊断结构可用，修复结果仍由独立测试判定。</p>
+          <p>
+            响应通过校验表示消息结构可用；工具与补丁分别校验，修复结果由独立测试判定。
+          </p>
           {task.model_calls?.map((call, i) => (
             <div className="model-call" key={call.id}>
               <div>

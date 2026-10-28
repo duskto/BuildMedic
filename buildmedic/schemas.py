@@ -32,8 +32,8 @@ class Source(StrictModel):
 
 class Limits(StrictModel):
     max_wall_seconds: int = Field(600, ge=30, le=1200)
-    max_model_calls: int = Field(8, ge=1, le=12)
-    max_tokens: int = Field(48000, ge=8192, le=150000)
+    max_model_calls: int = Field(8, ge=1, le=32)
+    max_tokens: int = Field(48000, ge=8192, le=250000)
 
 
 class CreateTask(StrictModel):
@@ -41,12 +41,15 @@ class CreateTask(StrictModel):
     mode: Literal["standard", "adaptive"] = "standard"
     limits: Limits = Field(default_factory=Limits)
     experience: bool = Field(False, strict=True)
+    agent_tools: bool = Field(False, strict=True)
 
     @model_validator(mode="after")
     def experience_scope(self):
         if self.experience and (self.mode != "adaptive" or self.source.type != "demo"):
             raise ValueError("经验库仅支持自适应演示任务")
-        if not self.experience and self.limits.max_tokens > 100000:
+        if not self.agent_tools and self.limits.max_model_calls > 12:
+            raise ValueError("超过 12 次的调用预算仅用于主动开启工具诊断的任务")
+        if not self.agent_tools and self.limits.max_tokens > (150000 if self.experience else 100000):
             raise ValueError("超过 100,000 Token 的预算仅用于主动开启经验反思的任务")
         return self
 
@@ -88,11 +91,55 @@ class Diagnosis(StrictModel):
         return self
 
 
+class NativeToolFunction(StrictModel):
+    name: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    arguments: str = Field(max_length=60000, strict=True)
+
+    @model_validator(mode="after")
+    def utf8_arguments(self):
+        self.arguments.encode("utf-8")
+        return self
+
+
+class NativeToolCall(StrictModel):
+    id: str = Field(pattern=r"^[A-Za-z0-9_.:-]{1,128}$")
+    type: Literal["function"]
+    function: NativeToolFunction
+
+
+class NativeAssistant(StrictModel):
+    role: Literal["assistant"] = "assistant"
+    content: None = None  # Assistant prose and private reasoning are never retained in tool mode.
+    tool_calls: list[NativeToolCall] = Field(default_factory=list, max_length=8)
+
+    @model_validator(mode="after")
+    def unique_calls(self):
+        ids = [call.id for call in self.tool_calls]
+        if len(set(ids)) != len(ids):
+            raise ValueError("工具调用 ID 重复")
+        return self
+
+
+class RemoteSnapshot(StrictModel):
+    profile_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{2,79}$")
+    profile_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    repository: str = Field(pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", max_length=200)
+    head_sha: str = Field(pattern=r"^[a-f0-9]{40}$")
+    snapshot_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class ExecutionRequest(StrictModel):
     execution_id: str = Field(pattern=r"^[a-f0-9]{32}$")
-    case_id: str
+    case_id: str | None = None
     check_id: Literal["target", "regression"]
     patch: str = Field(default="", max_length=40000)
+    remote: RemoteSnapshot | None = None
+
+    @model_validator(mode="after")
+    def one_snapshot_source(self):
+        if (self.case_id is None) == (self.remote is None):
+            raise ValueError("执行必须且只能指定案例或已登记远程快照")
+        return self
 
 
 Outcome = Literal["repaired", "diagnosed_only", "unresolved", "blocked", "not_reproduced", "budget_exhausted"]
@@ -113,9 +160,12 @@ class TaskSnapshot(BaseModel):
     run_attempt: int | None
     job_id: int | None
     profile_version: str | None
+    runner_profile: RemoteSnapshot | None = None
+    source_snapshot: dict | None = None
     execution_label: str
     parent_task_id: str | None
     mode: Literal["standard", "adaptive"]
+    agent_tools: bool = False
     lifecycle: Lifecycle
     phase: Phase
     phase_history: list[Phase] = Field(default_factory=list)
@@ -132,6 +182,7 @@ class TaskSnapshot(BaseModel):
     validations: list[dict]
     executions: list[dict]
     model_calls: list[dict] = Field(default_factory=list)
+    agent_actions: list[dict] = Field(default_factory=list)
     harness2_sha: str | None = None
     harness: dict | None = None
     experience: dict | None = None

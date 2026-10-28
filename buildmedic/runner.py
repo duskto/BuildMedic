@@ -19,9 +19,12 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 
 from .cases import CASES, case_dir, source_hash
 from .config import settings
+from .errors import Blocked
 from .patching import apply_patch
-from .schemas import ExecutionRequest
+from .profiles import registered
+from .schemas import ExecutionRequest, RemoteSnapshot
 from .security import sanitize
+from .snapshots import SnapshotStore, protected_hash
 
 
 def parse_junit(path):
@@ -58,6 +61,7 @@ class Engine:
         self.image = image if image is not None else settings().runner_image
         self.root = Path(data_dir or settings().data_dir / "runner").resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self.snapshots = SnapshotStore(self.root / "snapshots")
         self.pool = ThreadPoolExecutor(max_workers=2)
         self.lock = threading.RLock()
         self.jobs, self.processes, self.cancelled = {}, {}, set()
@@ -98,13 +102,16 @@ class Engine:
         tmp.replace(dest)
 
     def submit(self, req):
-        fingerprint = hashlib.sha256(req.model_dump_json().encode()).hexdigest()
+        fingerprint = hashlib.sha256(req.model_dump_json(exclude_none=True).encode()).hexdigest()
         with self.lock:
             if req.execution_id in self.jobs:
                 if self.jobs[req.execution_id]["request_hash"] != fingerprint:
                     raise ValueError("execution ID 已用于不同输入")
                 return self.jobs[req.execution_id]
-            if req.case_id not in CASES or CASES[req.case_id].get("blocked"):
+            if req.remote:
+                self.remote_profile(req.remote.model_dump())
+                self.snapshots.describe(req.remote.model_dump())
+            elif req.case_id not in CASES or CASES[req.case_id].get("blocked"):
                 raise ValueError("案例没有可执行的登记 profile")
             if sum(j["lifecycle"] in {"queued", "running"} for j in self.jobs.values()) >= 4:
                 raise ValueError("Runner 执行队列已满")
@@ -118,6 +125,12 @@ class Engine:
             self._save(value)
             self.pool.submit(self._execute, req)
             return dict(value)
+
+    def remote_profile(self, binding):
+        profile = registered(binding)
+        if self.backend != "docker" or self.image != profile.runtime_digest:
+            raise ValueError("远程仓库仅能在登记的固定 Docker 镜像中运行")
+        return profile
 
     def get(self, execution_id):
         with self.lock:
@@ -159,21 +172,33 @@ class Engine:
                 )
                 return
             repo = work / "repo"
+            profile = self.remote_profile(req.remote.model_dump()) if req.remote else None
+            if profile:
+                self.snapshots.describe(req.remote.model_dump())
+                source = self.snapshots.path(req.remote.model_dump()) / "repo" / profile.workspace
+            else:
+                source = case_dir(req.case_id)
             shutil.copytree(
-                case_dir(req.case_id), repo, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache")
+                source,
+                repo,
+                ignore=None if profile else shutil.ignore_patterns("__pycache__", ".pytest_cache"),
             )
-            baseline_hash = source_hash(repo)
-            tests_hash = source_hash(repo / "tests")
+            baseline_hash = profile.snapshot_sha256 if profile else source_hash(repo)
+            tests_hash = protected_hash(repo) if profile else source_hash(repo / "tests")
             if req.patch:
                 apply_patch(repo, req.patch)
-            if source_hash(repo / "tests") != tests_hash:
+            if (protected_hash(repo) if profile else source_hash(repo / "tests")) != tests_hash:
                 raise ValueError("测试完整性发生变化")
             output_dir = work / "output"
             output_dir.mkdir(mode=0o777)
             output_dir.chmod(0o777)
             report = output_dir / "report.xml"
-            case = CASES[req.case_id]
-            target = case.get("target", CASES.get(case.get("base_case", ""), {}).get("target"))
+            case = CASES.get(req.case_id, {})
+            target = (
+                profile.target
+                if profile
+                else case.get("target", CASES.get(case.get("base_case", ""), {}).get("target"))
+            )
             check = target if req.check_id == "target" else "tests"
             pytest_args = ["-m", "pytest", "-q", "-p", "no:cacheprovider", check]
             env = {
@@ -277,7 +302,9 @@ class Engine:
                 command=["python", *pytest_args],
                 image_digest=self.image or None,
                 python_version=sys.version.split()[0] if self.backend == "trusted-local" else None,
-                profile_id="python-pytest-demo-v1",
+                profile_id=profile.id if profile else "python-pytest-demo-v1",
+                profile_hash=profile.digest if profile else None,
+                head_sha=profile.head_sha if profile else None,
                 environment_fingerprint=environment_fingerprint,
                 snapshot_sha256=baseline_hash,
                 tests_sha256=tests_hash,
@@ -354,8 +381,17 @@ def health():
 def execute(req: ExecutionRequest):
     try:
         return engine().submit(req)
-    except ValueError as exc:
+    except (ValueError, Blocked) as exc:
         raise HTTPException(409, str(exc)) from exc
+
+
+@app.post("/runner/v1/snapshots", dependencies=[Depends(authorize)])
+async def prepare_snapshot(req: RemoteSnapshot):
+    try:
+        engine().remote_profile(req.model_dump())
+        return await engine().snapshots.prepare(req.model_dump())
+    except (ValueError, Blocked) as exc:
+        raise HTTPException(409, sanitize(str(exc))) from exc
 
 
 @app.get("/runner/v1/executions/{eid}", dependencies=[Depends(authorize)])

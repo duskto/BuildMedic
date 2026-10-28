@@ -25,7 +25,7 @@ BUILDMEDIC_ADAPTIVE_ENABLED=true
 uv run --extra adaptive python scripts/dev.py --web
 ```
 
-创建任务时选择演示案例和“自适应诊断”。默认推荐 12 次模型调用、100,000 tokens；服务端要求至少 7 次调用与 48,000 tokens。预算不足会正常结束并保留已有证据，不会自动扩大额度。GitHub 日志来源尚未登记复现环境，因此不开放自适应模式。
+创建任务时选择演示案例，或预览并选择已登记的 GitHub 失败 Job，然后选择“自适应诊断”。默认推荐 12 次模型调用、100,000 tokens；服务端要求至少 7 次调用与 48,000 tokens。预算不足会正常结束并保留已有证据，不会自动扩大额度。未登记的 GitHub 来源仅开放日志诊断；[远程接入说明](remote.md)介绍如何固定提交与执行环境。
 
 运行时核对已安装包的 Git URL 和完整 commit。缺少可选依赖、版本不匹配、功能开关关闭或模型未配置时，页面禁用此模式并给出原因。`uv run` 不加 `--extra adaptive` 可能同步回仅包含标准功能的环境，请使用上面的启动命令。
 
@@ -72,6 +72,8 @@ flowchart TD
 
 所有诊断、提议、可选反思和格式修正请求共用 Context 预算与调用账本。服务商用量缺失时保留保守预留；上游 ledger 中的占位 USD 不作为计价依据，面向用户的报告转换为未知。开启经验反思后推荐新任务使用 12 次调用、150,000 tokens；原有任务上限保持不变。仍未声称任何通用成功率或策略收益。
 
+可显式设置 `agent_tools=true`，让每个 Solver rollout 使用原生工具循环。INV / DOM / COMPOSE 提议仍使用原有结构化接口。各 rollout 的工具候选、检查和预算记录分别归属；工具检查不会替代候选及最终独立验收。完整轨迹带有实际工具活动和证据，取消、预算或环境阻塞通过桥接硬停止。推荐新任务 24 次 / 250,000 Token；开关缺省关闭，详见[Agent 工具诊断](agent-tools.md)。
+
 轨迹保留全部公开测试身份、计数、命令、退出码和可用输出；完整 Runner 原始产物及平台指纹另行归档。HTTP 传输压缩 JSON 空白，并用 `context_file_aliases` 无损表示重复文件，不截掉失败证据来满足预算；超出输入或任务预算时直接停止。
 
 ## 本轮验收
@@ -92,6 +94,6 @@ cd apps/web
 npm run test:live -- --grep 'adaptive:'
 ```
 
-P1 仍缺登记远程仓库的固定 SHA 快照与执行 profile。同会话的同域经验发布已接通；P2 的相同预算离线对照评测尚未实现，不能把本地自适应验收称为整个 P1/P2 已完成。
+远程固定 SHA 快照、登记 profile 与自适应执行已实现，并通过真实 Docker、模拟 GitHub 与脚本模型的集成检查；真实失败 Run 的端到端验收仍待执行。同会话的同域经验发布已接通；P2 的相同预算离线对照评测尚未实现，不能把开发验收称为整个 P1/P2 已完成。
 
 上游来源：[spec.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/core/spec.py)、[schedule.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/core/schedule.py)、[recursion.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/core/recursion.py)、[demo.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/demo.py)。

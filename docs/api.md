@@ -30,7 +30,7 @@ API 根路径为 `/api/v1`。成功返回 `{data, request_id}`，错误返回 `{
 {"source":{"type":"demo","case_id":"pagination"},"mode":"standard","limits":{"max_wall_seconds":600,"max_model_calls":8,"max_tokens":48000}}
 ```
 
-GitHub source 必须同时包含 `run_url`、`run_attempt`、`job_id`。服务端重新查询并确认 Job 属于固定 attempt 和 SHA。仅公开仓库；当前版本执行能力为日志诊断，无法自动复现远程仓库。需要读取受保护日志时在服务端配置 GitHub Token。
+GitHub source 必须同时包含 `run_url`、`run_attempt`、`job_id`。服务端重新查询并确认 Job 属于固定 attempt 和 SHA。仅公开仓库；匹配管理员登记的仓库 / SHA / workflow / Job 后支持本地独立复现与修复，未登记来源仅做日志诊断。需要读取受保护日志时在服务端配置 GitHub Token。浏览器不能提交 profile、命令或镜像。
 
 GitHub URL 仅接受 `https://github.com/owner/repo/actions/runs/id`，可使用 `?attempt=2` 固定运行次数。下载仅跟随经过主机校验的官方日志重定向，并使用独立 HTTP client，避免把 API Authorization 透传给下载主机。
 
@@ -42,10 +42,16 @@ GitHub URL 仅接受 `https://github.com/owner/repo/actions/runs/id`，可使用
 
 任务快照的 `model_calls` 保存逐次调用状态、请求与响应模型、用量与耗时；它只记录可审核的执行事实，不保存 `reasoning_content`。`phase_history` 记录实际到达过的阶段，提前结束后不把未执行阶段显示为完成。
 
-自适应模式 `mode=adaptive` 仅接受 demo 来源，需安装固定版本 Harness²、开启服务端开关并配置模型。创建时至少 7 次调用 / 48,000 Token 预算，推荐 12 次 / 100,000。未知能力、远程来源和不足预算分别返回 `adaptive_unavailable`、`adaptive_source_unsupported`、`adaptive_budget_too_small`。
+自适应模式 `mode=adaptive` 接受 demo 和已登记的 GitHub Job，需安装固定版本 Harness²、开启服务端开关并配置模型。创建时至少 7 次调用 / 48,000 Token 预算，推荐 12 次 / 100,000。未知能力、未登记的远程来源和不足预算分别返回 `adaptive_unavailable`、`adaptive_source_unsupported`、`adaptive_budget_too_small`。
+
+预览返回每个 Job 的 `execution_supported` 与 `profile_version`；页面据此开启远程自适应入口。任务创建时保存服务器生成的 `runner_profile` 绑定，准备后增加 `source_snapshot` 和 `snapshot.prepared` 事件。该快照含完整性清单与完整 profile 的产物 ID，继续通过任务归属检查后下载。
+
+内部 `POST /runner/v1/snapshots` 接受 `RemoteSnapshot` 绑定，仅准备已登记的公开固定提交；`ExecutionRequest` 必须在 `case_id` 与 `remote` 绑定中二选一。远程执行要求已验证缓存和完全匹配的 Docker 镜像，拒绝可信本机模式。两个接口均使用内部 Runner Bearer 令牌；浏览器没有调用入口。详见[远程接入](remote.md)。
 
 快照的 `harness2_sha` 与 `harness` 记录原生调度版本、k/mode、提议差异、阶段回退和组合采用结果；`model_calls.role` 区分诊断与策略提议，包含全部格式修正请求。SSE 增加 `harness.started`、`harness.proposed`、`harness.finished` 与 `harness.interrupted`，可按已有游标恢复。
 
-`experience=true` 仅允许 adaptive demo，至少 8 次模型调用，推荐新任务使用 12 次 / 150,000 Token；此字段缺省为 false。只有主动开启反思时才能申请超过 100,000 的预算，最高 150,000。已有任务及标准诊断的上限保持不变。
+`experience=true` 仅允许 adaptive demo，至少 8 次模型调用，推荐新任务使用 12 次 / 150,000 Token；此字段缺省为 false。未开启工具时，只有主动开启反思才能申请超过 100,000 的预算，最高 150,000。
+
+`agent_tools=true` 显式启用原生工具循环，支持标准与自适应的登记来源，缺省关闭。工具任务最高 32 次调用 / 250,000 Token，且不能超过 `/health.max_model_calls`。标准至少 4 次 / 24,000 Token，自适应至少 11 次 / 48,000 Token，含经验反思时至少 12 次。前置配置不满足返回 `agent_tools_unavailable`，预算不足返回 `agent_budget_too_small`。未开启工具的任务仍最多 12 次调用，旧请求幂等 hash 兼容。`/health.agent_tools_ready` 表示配置就绪；不探测付费工具生成能力。快照增加 `agent_tools`、`agent_actions`，事件增加 `agent.tool_started` / `agent.tool_finished`，详见[工具边界与预算](agent-tools.md)。
 
 任务快照的 `experience` 记录创建时冻结的输入版本/指纹、反思状态、验证后的草稿和已发布版本 ID。`experience_reflection` 模型调用与其他角色共用预算。SSE 增加 `experience.reflecting`、`experience.reflected`、`experience.rejected`、`experience.available`、`experience.unverified`、`experience.published`。发布只使用服务器生成的草稿，不接收客户端编造的经验或策略，取消、未修复或证据不匹配返回 409。重复发布同一来源任务返回原版本；不同来源使用已占用的幂等键返回 409。全部接口检查当前会话归属，越权返回 404。详见[经验管理](experience.md)。

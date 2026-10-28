@@ -12,20 +12,60 @@
         },
         "max_model_calls": {
           "default": 8,
-          "maximum": 12,
+          "maximum": 32,
           "minimum": 1,
           "title": "Max Model Calls",
           "type": "integer"
         },
         "max_tokens": {
           "default": 48000,
-          "maximum": 150000,
+          "maximum": 250000,
           "minimum": 8192,
           "title": "Max Tokens",
           "type": "integer"
         }
       },
       "title": "Limits",
+      "type": "object"
+    },
+    "RemoteSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "profile_id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{2,79}$",
+          "title": "Profile Id",
+          "type": "string"
+        },
+        "profile_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Profile Hash",
+          "type": "string"
+        },
+        "repository": {
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+          "title": "Repository",
+          "type": "string"
+        },
+        "head_sha": {
+          "pattern": "^[a-f0-9]{40}$",
+          "title": "Head Sha",
+          "type": "string"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile_id",
+        "profile_hash",
+        "repository",
+        "head_sha",
+        "snapshot_sha256"
+      ],
+      "title": "RemoteSnapshot",
       "type": "object"
     }
   },
@@ -130,6 +170,30 @@
       ],
       "title": "Profile Version"
     },
+    "runner_profile": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RemoteSnapshot"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "source_snapshot": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Snapshot"
+    },
     "execution_label": {
       "title": "Execution Label",
       "type": "string"
@@ -152,6 +216,11 @@
       ],
       "title": "Mode",
       "type": "string"
+    },
+    "agent_tools": {
+      "default": false,
+      "title": "Agent Tools",
+      "type": "boolean"
     },
     "lifecycle": {
       "enum": [
@@ -291,6 +360,14 @@
         "type": "object"
       },
       "title": "Model Calls",
+      "type": "array"
+    },
+    "agent_actions": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Agent Actions",
       "type": "array"
     },
     "harness2_sha": {

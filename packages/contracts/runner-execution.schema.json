@@ -1,4 +1,46 @@
 {
+  "$defs": {
+    "RemoteSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "profile_id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{2,79}$",
+          "title": "Profile Id",
+          "type": "string"
+        },
+        "profile_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Profile Hash",
+          "type": "string"
+        },
+        "repository": {
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+          "title": "Repository",
+          "type": "string"
+        },
+        "head_sha": {
+          "pattern": "^[a-f0-9]{40}$",
+          "title": "Head Sha",
+          "type": "string"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile_id",
+        "profile_hash",
+        "repository",
+        "head_sha",
+        "snapshot_sha256"
+      ],
+      "title": "RemoteSnapshot",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "execution_id": {
@@ -7,8 +49,16 @@
       "type": "string"
     },
     "case_id": {
-      "title": "Case Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Case Id"
     },
     "check_id": {
       "enum": [
@@ -23,11 +73,21 @@
       "maxLength": 40000,
       "title": "Patch",
       "type": "string"
+    },
+    "remote": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RemoteSnapshot"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [
     "execution_id",
-    "case_id",
     "check_id"
   ],
   "title": "ExecutionRequest",
