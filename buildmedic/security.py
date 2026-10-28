@@ -3,6 +3,7 @@ import hmac
 import re
 import secrets
 from pathlib import PurePosixPath
+
 from .config import settings
 
 ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*\x07)")
@@ -11,8 +12,14 @@ ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*\x07)")
 def sanitize(value: str) -> str:
     value = ANSI.sub("", value)
     value = re.sub(r"(?i)(authorization\s*[:=]\s*(?:bearer|token)?\s*)\S+", r"\1[REDACTED]", value)
-    value = re.sub(r"\b(?:gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})", "[REDACTED]", value)
-    value = re.sub(r"(?i)((?:api[_-]?key|access[_-]?token|password|secret)\s*[=:]\s*)[^\s,;]+", r"\1[REDACTED]", value)
+    value = re.sub(
+        r"\b(?:gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})",
+        "[REDACTED]",
+        value,
+    )
+    value = re.sub(
+        r"(?i)((?:api[_-]?key|access[_-]?token|password|secret)\s*[=:]\s*)[^\s,;]+", r"\1[REDACTED]", value
+    )
     value = re.sub(r"(https?://[^\s?]+)\?[^\s]+", r"\1?[REDACTED]", value)
     for secret in (settings().model_api_key, settings().github_token, settings().runner_token):
         if secret and len(secret) >= 8:

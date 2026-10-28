@@ -1,0 +1,31 @@
+{
+  "additionalProperties": true,
+  "properties": {
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "seq": {
+      "minimum": 1,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "state_version": {
+      "minimum": 1,
+      "title": "State Version",
+      "type": "integer"
+    },
+    "at": {
+      "title": "At",
+      "type": "number"
+    }
+  },
+  "required": [
+    "task_id",
+    "seq",
+    "state_version",
+    "at"
+  ],
+  "title": "TaskEvent",
+  "type": "object"
+}

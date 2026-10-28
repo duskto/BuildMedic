@@ -1,5 +1,7 @@
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,13 +22,18 @@ class Settings(BaseSettings):
     model_base_url: str = ""
     model_api_key: str = ""
     model_id: str = ""
+    model_provider: Literal["compatible", "deepseek"] = "compatible"
+    model_thinking: Literal["enabled", "disabled"] = "disabled"
     github_token: str = ""
-    harness2_path: str = ""
+    adaptive_enabled: bool = False
     cookie_secure: bool = False
     max_active_tasks: int = 2
     lease_seconds: int = 90
     max_model_calls: int = 12
     max_output_tokens: int = 4096
+    model_timeout_seconds: int = 90
+    allowed_hosts: str = "localhost,127.0.0.1,testserver"
+    web_dist: Path = ROOT / "apps/web/dist"
 
     @property
     def model_ready(self):

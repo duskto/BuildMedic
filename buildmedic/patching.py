@@ -1,9 +1,57 @@
 """Strict unified-diff application: source-only, no rename, creation or deletion."""
+
+import difflib
 import re
 from pathlib import Path
+
 from .security import safe_path
 
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$")
+
+
+def source_target(root, value):
+    path = safe_path(value)
+    if not path.parts or path.parts[0] != "src" or path.suffix != ".py":
+        raise ValueError("仅允许修改 src/ 下已有 Python 文件")
+    target = root / path
+    if any(p.is_symlink() for p in [target, *target.parents]) or not target.is_file():
+        raise ValueError("不能修改符号链接或不存在的文件")
+    if not target.resolve().is_relative_to(root.resolve()):
+        raise ValueError("路径越界")
+    return target
+
+
+def patch_from_edits(root: Path, edits):
+    """Build exact model-authored replacements into an auditable unified diff, without writing."""
+    if not 1 <= len(edits) <= 5:
+        raise ValueError("精确编辑数量超出限制")
+    patches, seen = [], set()
+    for edit in edits:
+        path, before, after = edit.path, edit.before, edit.after
+        target = source_target(root, path)
+        if path in seen:
+            raise ValueError("每个文件仅允许一个精确替换块，请合并相邻编辑")
+        seen.add(path)
+        original = target.read_text()
+        if not before or original.count(before) != 1:
+            raise ValueError("before 必须与固定快照中的唯一片段逐字匹配")
+        if before == after:
+            raise ValueError("精确编辑没有产生修改")
+        revised = original.replace(before, after, 1)
+        if not revised.endswith("\n"):
+            raise ValueError("编辑后必须保留文件末尾换行")
+        patches.extend(
+            difflib.unified_diff(
+                original.splitlines(keepends=True),
+                revised.splitlines(keepends=True),
+                fromfile="a/" + path,
+                tofile="b/" + path,
+            )
+        )
+    patch = "".join(patches)
+    if len(patch.encode()) > 40000:
+        raise ValueError("生成补丁超出大小限制")
+    return patch
 
 
 def apply_patch(root: Path, patch: str):
@@ -17,18 +65,14 @@ def apply_patch(root: Path, patch: str):
         if lines[i].startswith("diff --git ") or lines[i].startswith("index "):
             i += 1
             continue
-        if not lines[i].startswith("--- a/") or i + 1 >= len(lines) or not lines[i+1].startswith("+++ b/"):
+        if not lines[i].startswith("--- a/") or i + 1 >= len(lines) or not lines[i + 1].startswith("+++ b/"):
             raise ValueError("只接受标准 a/ 与 b/ 路径的 unified diff")
         old = lines[i][6:].strip()
-        new = lines[i+1][6:].strip()
+        new = lines[i + 1][6:].strip()
         path = safe_path(new)
         if old != new or path.parts[0] != "src" or path.suffix != ".py" or str(path) in changes:
             raise ValueError("仅允许修改 src/ 下已有 Python 文件，不能重命名或修改测试")
-        target = root / path
-        if any(p.is_symlink() for p in [target, *target.parents]) or not target.is_file():
-            raise ValueError("不能修改符号链接或不存在的文件")
-        if not target.resolve().is_relative_to(root.resolve()):
-            raise ValueError("路径越界")
+        target = source_target(root, new)
         original = target.read_text().splitlines(keepends=True)
         result, cursor = [], 0
         i += 2
@@ -61,7 +105,9 @@ def apply_patch(root: Path, patch: str):
                     changed_lines += 1
                 i += 1
             if (removed, added) != (count, new_count):
-                raise ValueError("hunk 行数不匹配")
+                raise ValueError(
+                    f"hunk 行数不匹配：头部声明旧/新 {count}/{new_count} 行，实际 {removed}/{added} 行"
+                )
             hunk_count += 1
         if not hunk_count:
             raise ValueError("补丁没有修改块")

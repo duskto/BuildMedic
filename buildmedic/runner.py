@@ -1,4 +1,5 @@
 """Internal Runner. Run separately from API/Worker; never exposes a shell API."""
+
 import hashlib
 import json
 import os
@@ -13,7 +14,9 @@ import time
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
 from fastapi import Depends, FastAPI, Header, HTTPException
+
 from .cases import CASES, case_dir, source_hash
 from .config import settings
 from .patching import apply_patch
@@ -32,10 +35,18 @@ def parse_junit(path):
     except ET.ParseError:
         return None
     cases = root.findall(".//testcase")
-    result = dict(collected=len(cases), passed=0, failed=0, errors=0, skipped=0, tests=[])
+    result = {"collected": len(cases), "passed": 0, "failed": 0, "errors": 0, "skipped": 0, "tests": []}
     for case in cases:
         name = f"{case.get('classname', '')}::{case.get('name', '')}"
-        state = "failed" if case.find("failure") is not None else "errors" if case.find("error") is not None else "skipped" if case.find("skipped") is not None else "passed"
+        state = (
+            "failed"
+            if case.find("failure") is not None
+            else "errors"
+            if case.find("error") is not None
+            else "skipped"
+            if case.find("skipped") is not None
+            else "passed"
+        )
         result[state] += 1
         result["tests"].append({"id": name, "status": state})
     return result
@@ -45,7 +56,7 @@ class Engine:
     def __init__(self, backend=None, image=None, data_dir=None):
         self.backend = backend or settings().runner_backend
         self.image = image if image is not None else settings().runner_image
-        self.root = Path(data_dir or settings().data_dir / "runner")
+        self.root = Path(data_dir or settings().data_dir / "runner").resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.pool = ThreadPoolExecutor(max_workers=2)
         self.lock = threading.RLock()
@@ -53,6 +64,16 @@ class Engine:
         for file in self.root.glob("*.json"):
             value = json.loads(file.read_text())
             if value["lifecycle"] in {"queued", "running"}:
+                if self.backend == "docker":
+                    try:
+                        subprocess.run(
+                            ["docker", "rm", "-f", "bm-" + value["id"]],
+                            capture_output=True,
+                            timeout=10,
+                            check=False,
+                        )
+                    except (OSError, subprocess.TimeoutExpired):
+                        pass
                 value.update(lifecycle="interrupted", reason="runner_restarted")
                 self._save(value)
             self.jobs[value["id"]] = value
@@ -63,7 +84,9 @@ class Engine:
         if self.backend != "docker" or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.image):
             return False, "尚未配置固定 sha256 镜像；请按 README 构建 Runner 镜像"
         try:
-            p = subprocess.run(["docker", "image", "inspect", self.image], capture_output=True, timeout=5)
+            p = subprocess.run(
+                ["docker", "image", "inspect", self.image], capture_output=True, timeout=5, check=False
+            )
             return (True, "固定镜像可用") if p.returncode == 0 else (False, "Docker 或固定镜像不可用")
         except (OSError, subprocess.TimeoutExpired):
             return False, "无法连接 Docker Runner"
@@ -85,7 +108,12 @@ class Engine:
                 raise ValueError("案例没有可执行的登记 profile")
             if sum(j["lifecycle"] in {"queued", "running"} for j in self.jobs.values()) >= 4:
                 raise ValueError("Runner 执行队列已满")
-            value = dict(id=req.execution_id, lifecycle="queued", request_hash=fingerprint, created_at=time.time())
+            value = {
+                "id": req.execution_id,
+                "lifecycle": "queued",
+                "request_hash": fingerprint,
+                "created_at": time.time(),
+            }
             self.jobs[req.execution_id] = value
             self._save(value)
             self.pool.submit(self._execute, req)
@@ -101,7 +129,9 @@ class Engine:
             proc = self.processes.get(execution_id)
             if proc and proc.poll() is None:
                 if self.backend == "docker":
-                    subprocess.run(["docker", "kill", "bm-" + execution_id], capture_output=True, timeout=10)
+                    subprocess.run(
+                        ["docker", "kill", "bm-" + execution_id], capture_output=True, timeout=10, check=False
+                    )
                 try:
                     os.killpg(proc.pid, signal.SIGKILL)
                 except ProcessLookupError:
@@ -124,23 +154,36 @@ class Engine:
                 self._save(value)
             ready, message = self.ready()
             if not ready:
-                value.update(lifecycle="completed", reason="environment_blocked", message=message, exit_code=None)
+                value.update(
+                    lifecycle="completed", reason="environment_blocked", message=message, exit_code=None
+                )
                 return
             repo = work / "repo"
-            shutil.copytree(case_dir(req.case_id), repo, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
+            shutil.copytree(
+                case_dir(req.case_id), repo, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache")
+            )
             baseline_hash = source_hash(repo)
             tests_hash = source_hash(repo / "tests")
             if req.patch:
                 apply_patch(repo, req.patch)
             if source_hash(repo / "tests") != tests_hash:
                 raise ValueError("测试完整性发生变化")
-            report = work / "report.xml"
+            output_dir = work / "output"
+            output_dir.mkdir(mode=0o777)
+            output_dir.chmod(0o777)
+            report = output_dir / "report.xml"
             case = CASES[req.case_id]
             target = case.get("target", CASES.get(case.get("base_case", ""), {}).get("target"))
             check = target if req.check_id == "target" else "tests"
             pytest_args = ["-m", "pytest", "-q", "-p", "no:cacheprovider", check]
-            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "C.UTF-8", "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
-                   "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": str(repo / "src"), "HOME": str(work)}
+            env = {
+                "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                "LANG": "C.UTF-8",
+                "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONPATH": str(repo / "src"),
+                "HOME": str(work),
+            }
             if self.backend == "trusted-local":
                 argv = [sys.executable, *pytest_args, "--junitxml=" + str(report)]
             else:
@@ -148,20 +191,60 @@ class Engine:
                 work.chmod(0o777)
                 for path in repo.rglob("*"):
                     path.chmod(0o755 if path.is_dir() else 0o644)
-                argv = ["docker", "run", "--rm", "--name", "bm-" + eid, "--network", "none", "--read-only",
-                        "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user", "65534:65534",
-                        "--memory", "1g", "--cpus", "1", "--pids-limit", "128", "--ulimit", "fsize=8192:8192",
-                        "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m", "-v", f"{repo.resolve()}:/work/repo:ro",
-                        "-v", f"{work.resolve()}:/output:rw", "-w", "/work/repo", "-e", "PYTHONPATH=/work/repo/src",
-                        "-e", "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1", "-e", "PYTHONDONTWRITEBYTECODE=1",
-                        self.image, "python", *pytest_args, "--junitxml=/output/report.xml"]
+                argv = [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "--name",
+                    "bm-" + eid,
+                    "--network",
+                    "none",
+                    "--read-only",
+                    "--cap-drop=ALL",
+                    "--security-opt=no-new-privileges",
+                    "--user",
+                    "65534:65534",
+                    "--memory",
+                    "1g",
+                    "--cpus",
+                    "1",
+                    "--pids-limit",
+                    "128",
+                    "--ulimit",
+                    "fsize=8192:8192",
+                    "--tmpfs",
+                    "/tmp:rw,noexec,nosuid,size=64m",
+                    "-v",
+                    f"{repo.resolve()}:/work/repo:ro",
+                    "-v",
+                    f"{output_dir.resolve()}:/output:rw",
+                    "-w",
+                    "/work/repo",
+                    "-e",
+                    "PYTHONPATH=/work/repo/src",
+                    "-e",
+                    "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1",
+                    "-e",
+                    "PYTHONDONTWRITEBYTECODE=1",
+                    self.image,
+                    "python",
+                    *pytest_args,
+                    "--junitxml=/output/report.xml",
+                ]
             logfile = work / "stdout.log"
             with logfile.open("w+") as output:
                 with self.lock:
                     if eid in self.cancelled:
                         value.update(lifecycle="cancelled", reason="user_cancelled")
                         return
-                    proc = subprocess.Popen(argv, cwd=repo, env=env, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
+                    proc = subprocess.Popen(
+                        argv,
+                        cwd=repo,
+                        env=env,
+                        stdout=output,
+                        stderr=subprocess.STDOUT,
+                        start_new_session=True,
+                    )
                     self.processes[eid] = proc
                 reason = "exited"
                 while proc.poll() is None:
@@ -176,21 +259,64 @@ class Engine:
             if eid in self.cancelled and reason == "exited":
                 reason = "user_cancelled"
             counts = parse_junit(report)
-            value.update(lifecycle="cancelled" if reason == "user_cancelled" else "completed", reason=reason,
-                check_id=req.check_id, command=["python", *pytest_args], image_digest=self.image or None,
-                python_version=sys.version.split()[0] if self.backend == "trusted-local" else "3.12",
-                profile_id="python-pytest-demo-v1", snapshot_sha256=baseline_hash, tests_sha256=tests_hash,
-                patch_hash=hashlib.sha256(req.patch.encode()).hexdigest(), exit_code=proc.returncode,
-                counts=counts, stdout=text, duration_seconds=round(time.monotonic()-start, 3),
-                scope="登记 profile 内的本地验证", isolation=self.backend,
-                passed=proc.returncode == 0 and reason == "exited" and bool(counts and counts["collected"] > 0 and counts["passed"] > 0 and counts["failed"] == counts["errors"] == 0))
-        except Exception as exc:
-            value.update(lifecycle="completed", reason="runner_error", message=sanitize(str(exc)), exit_code=None, passed=False)
+            import importlib.metadata
+
+            environment = {
+                "backend": self.backend,
+                "image": self.image or None,
+                "python": sys.version if self.backend == "trusted-local" else None,
+                "pytest": importlib.metadata.version("pytest") if self.backend == "trusted-local" else None,
+            }
+            environment_fingerprint = hashlib.sha256(
+                json.dumps(environment, sort_keys=True).encode()
+            ).hexdigest()
+            value.update(
+                lifecycle="cancelled" if reason == "user_cancelled" else "completed",
+                reason=reason,
+                check_id=req.check_id,
+                command=["python", *pytest_args],
+                image_digest=self.image or None,
+                python_version=sys.version.split()[0] if self.backend == "trusted-local" else None,
+                profile_id="python-pytest-demo-v1",
+                environment_fingerprint=environment_fingerprint,
+                snapshot_sha256=baseline_hash,
+                tests_sha256=tests_hash,
+                patch_hash=hashlib.sha256(req.patch.encode()).hexdigest(),
+                exit_code=proc.returncode,
+                counts=counts,
+                stdout=text,
+                duration_seconds=round(time.monotonic() - start, 3),
+                scope="登记 profile 内的本地验证",
+                isolation=self.backend,
+                passed=proc.returncode == 0
+                and reason == "exited"
+                and bool(
+                    counts
+                    and counts["collected"] > 0
+                    and counts["passed"] > 0
+                    and counts["failed"] == counts["errors"] == 0
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001 - Persist execution failure before releasing the worker slot.
+            value.update(
+                lifecycle="completed",
+                reason="runner_error",
+                message=sanitize(str(exc)),
+                exit_code=None,
+                passed=False,
+            )
         finally:
             with self.lock:
                 self.processes.pop(eid, None)
                 value["finished_at"] = time.time()
                 self._save(value)
+            # A test can fork children and let its parent exit; always clean the process group.
+            proc = locals().get("proc")
+            if proc is not None:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
             shutil.rmtree(work, ignore_errors=True)
 
 
@@ -207,6 +333,7 @@ def engine():
 
 def authorize(authorization: str = Header(default="")):
     import hmac
+
     token = settings().runner_token
     if not token or not hmac.compare_digest(authorization, "Bearer " + token):
         raise HTTPException(401, "Runner authentication required")
@@ -215,7 +342,12 @@ def authorize(authorization: str = Header(default="")):
 @app.get("/runner/v1/health", dependencies=[Depends(authorize)])
 def health():
     ready, message = engine().ready()
-    return {"ready": ready, "message": message, "backend": engine().backend, "image_digest": engine().image or None}
+    return {
+        "ready": ready,
+        "message": message,
+        "backend": engine().backend,
+        "image_digest": engine().image or None,
+    }
 
 
 @app.post("/runner/v1/executions", status_code=202, dependencies=[Depends(authorize)])

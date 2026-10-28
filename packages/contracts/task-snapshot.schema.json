@@ -1,0 +1,407 @@
+{
+  "$defs": {
+    "Limits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_wall_seconds": {
+          "default": 600,
+          "maximum": 1200,
+          "minimum": 30,
+          "title": "Max Wall Seconds",
+          "type": "integer"
+        },
+        "max_model_calls": {
+          "default": 8,
+          "maximum": 12,
+          "minimum": 1,
+          "title": "Max Model Calls",
+          "type": "integer"
+        },
+        "max_tokens": {
+          "default": 48000,
+          "maximum": 150000,
+          "minimum": 8192,
+          "title": "Max Tokens",
+          "type": "integer"
+        }
+      },
+      "title": "Limits",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "Backend-owned durable snapshot contract; additive execution metadata is allowed.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "repo": {
+      "title": "Repo",
+      "type": "string"
+    },
+    "source_type": {
+      "enum": [
+        "demo",
+        "github_actions"
+      ],
+      "title": "Source Type",
+      "type": "string"
+    },
+    "case_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Case Id"
+    },
+    "head_sha": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Head Sha"
+    },
+    "snapshot_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Snapshot Sha256"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Run Id"
+    },
+    "run_attempt": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Run Attempt"
+    },
+    "job_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Job Id"
+    },
+    "profile_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Profile Version"
+    },
+    "execution_label": {
+      "title": "Execution Label",
+      "type": "string"
+    },
+    "parent_task_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Parent Task Id"
+    },
+    "mode": {
+      "enum": [
+        "standard",
+        "adaptive"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "lifecycle": {
+      "enum": [
+        "queued",
+        "running",
+        "completed",
+        "failed",
+        "interrupted",
+        "cancelling",
+        "cancelled"
+      ],
+      "title": "Lifecycle",
+      "type": "string"
+    },
+    "phase": {
+      "enum": [
+        "ingest",
+        "preflight",
+        "reproduce",
+        "diagnose",
+        "refine",
+        "validate",
+        "report"
+      ],
+      "title": "Phase",
+      "type": "string"
+    },
+    "phase_history": {
+      "items": {
+        "enum": [
+          "ingest",
+          "preflight",
+          "reproduce",
+          "diagnose",
+          "refine",
+          "validate",
+          "report"
+        ],
+        "type": "string"
+      },
+      "title": "Phase History",
+      "type": "array"
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "enum": [
+            "repaired",
+            "diagnosed_only",
+            "unresolved",
+            "blocked",
+            "not_reproduced",
+            "budget_exhausted"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Outcome"
+    },
+    "validation_status": {
+      "enum": [
+        "not_run",
+        "passed",
+        "failed",
+        "blocked"
+      ],
+      "title": "Validation Status",
+      "type": "string"
+    },
+    "reproduction_status": {
+      "enum": [
+        "reproduced",
+        "not_reproduced",
+        "blocked"
+      ],
+      "title": "Reproduction Status",
+      "type": "string"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "state_version": {
+      "title": "State Version",
+      "type": "integer"
+    },
+    "last_event_seq": {
+      "title": "Last Event Seq",
+      "type": "integer"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "number"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "number"
+    },
+    "evidence": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "candidates": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Candidates",
+      "type": "array"
+    },
+    "validations": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Validations",
+      "type": "array"
+    },
+    "executions": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Executions",
+      "type": "array"
+    },
+    "model_calls": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Model Calls",
+      "type": "array"
+    },
+    "harness2_sha": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Harness2 Sha"
+    },
+    "harness": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Harness"
+    },
+    "experience": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Experience"
+    },
+    "rollouts": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Rollouts",
+      "type": "array"
+    },
+    "diagnosis": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Diagnosis"
+    },
+    "artifacts": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "usage": {
+      "additionalProperties": true,
+      "title": "Usage",
+      "type": "object"
+    },
+    "limits": {
+      "$ref": "#/$defs/Limits"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "repo",
+    "source_type",
+    "case_id",
+    "head_sha",
+    "run_id",
+    "run_attempt",
+    "job_id",
+    "profile_version",
+    "execution_label",
+    "parent_task_id",
+    "mode",
+    "lifecycle",
+    "phase",
+    "outcome",
+    "validation_status",
+    "reproduction_status",
+    "message",
+    "state_version",
+    "last_event_seq",
+    "created_at",
+    "updated_at",
+    "evidence",
+    "candidates",
+    "validations",
+    "executions",
+    "rollouts",
+    "diagnosis",
+    "artifacts",
+    "usage",
+    "limits"
+  ],
+  "title": "TaskSnapshot",
+  "type": "object"
+}

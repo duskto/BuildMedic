@@ -1,0 +1,35 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "execution_id": {
+      "pattern": "^[a-f0-9]{32}$",
+      "title": "Execution Id",
+      "type": "string"
+    },
+    "case_id": {
+      "title": "Case Id",
+      "type": "string"
+    },
+    "check_id": {
+      "enum": [
+        "target",
+        "regression"
+      ],
+      "title": "Check Id",
+      "type": "string"
+    },
+    "patch": {
+      "default": "",
+      "maxLength": 40000,
+      "title": "Patch",
+      "type": "string"
+    }
+  },
+  "required": [
+    "execution_id",
+    "case_id",
+    "check_id"
+  ],
+  "title": "ExecutionRequest",
+  "type": "object"
+}

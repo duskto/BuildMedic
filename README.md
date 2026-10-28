@@ -1,27 +1,142 @@
 # BuildMedic
 
-CI 失败诊断与独立补丁验证平台，当前提交保存开发中的工程基础。
+CI 失败诊断与补丁验证工作台。通过 React 页面创建任务，Python Worker 读取固定快照，在独立 Runner 复现失败、请求真实模型生成补丁，并用全新副本执行目标测试与完整回归。
 
-## 已有内容
+当前版本 `0.2.0` 已完成 P0 本地标准诊断验收：三个案例从浏览器提交，经真实 DeepSeek 生成修复，在 Docker 中独立验证通过。现已接通固定版本 Harness² 的本地自适应诊断；远程仓库执行仍待登记环境。
 
-- Python 项目配置及 `uv.lock` 依赖锁文件。
-- 任务、事件、产物、执行租约和 outbox 的 SQLAlchemy 数据模型。
-- 会话签名、日志脱敏、任务幂等创建和状态持久化逻辑。
-- 只允许修改 `src/` 下既有 Python 文件的 unified diff 校验与应用。
-- 独立 Runner 服务，提供固定 pytest 检查、JUnit 解析和执行取消。
-- 分页边界、内部导入、调用签名三个真实失败测试案例。
-- React / TypeScript 前端依赖声明。
+## 当前能力
 
-## 开发状态
+- 工作台、创建任务、筛选分页列表、任务详情与移动端布局。
+- 三个真实 pytest 缺陷案例：分页边界、内部导入、调用签名；另有环境阻塞和目标未复现两条失败路径。
+- FastAPI、SQLite / PostgreSQL、持久事件与可恢复 SSE、产物下载、同源 HttpOnly 会话。
+- 幂等创建、事务 outbox、数据库 Worker；可选 Celery / Redis 分发。
+- 独立 Runner 的固定检查、进程组取消、JUnit 解析、环境与测试指纹。
+- 补丁路径与范围校验、原始失败指纹检查、候选测试及最终独立验证；重新验证追加历史记录。
+- Harness² k=1 顺序优化：真实策略提议、4 个独立 rollout、组合策略差异与最终独立验收。
+- 真实模型的 Chat Completions 兼容接口；调用前预算预留、缺失用量标记、格式与证据引用校验。
+- GitHub Actions 公开仓库 Run 预览、固定 attempt 的失败 Job 分页读取及日志诊断。远程仓库尚未登记复现环境，因此不执行远程仓库代码。
 
-项目尚未形成可用的端到端产品：Web 页面、业务 API、Worker 编排、模型调用、GitHub Actions 接入和 Harness² 适配仍需实现。Runner 及现有模块也尚未完成集成验证。
+## 本地开发
 
-案例中的缺陷是故意保留的，原始测试预期失败。不要将它们的失败误认为平台自身的测试结果。
+需要 Python 3.12 / 3.13、Node.js 22+、uv 和 npm。安装依赖：
 
-## 环境配置
+```sh
+uv sync --locked
+cd apps/web
+npm ci
+cd ../..
+```
 
-使用 Python 3.12 或更新版本，通过 `uv sync --locked` 安装依赖。复制 `.env.example` 为 `.env` 后填写本地配置。默认数据库为 SQLite，PostgreSQL 可通过环境变量配置。
+Python 和前端依赖分别由 `uv.lock` 与 `apps/web/package-lock.json` 固定。
 
-Runner 需要独立令牌和固定 `sha256:` 镜像。默认采用 Docker 后端；`trusted-local` 仅用于明确受信任案例的本地开发，它不提供容器隔离。当前仓库尚未提供镜像构建和完整启动脚本。
+使用自适应诊断时，运行 `uv sync --locked --extra adaptive`，配置 `BUILDMEDIC_ADAPTIVE_ENABLED=true`，并用 `uv run --extra adaptive python scripts/dev.py --web` 启动。完整说明及固定上游 SHA 见 [Harness² 接入](docs/harness.md)。
 
-开发指南、凭据、本地缓存、依赖目录和运行数据由 `.gitignore` 排除；依赖锁文件及 `.env.example` 保留在版本控制中。
+配置并初始化数据库：
+
+```sh
+cp .env.example .env
+uv run python scripts/migrate.py
+```
+
+如果此前使用自动建表的旧数据库，可运行 `uv run python scripts/migrate.py --adopt-existing`；程序只接管结构完全匹配的旧库，并先备份 SQLite。API/Worker 启动只检查迁移版本，开发启动脚本会先执行升级。
+
+填写 `.env` 中的会话密钥、Runner 令牌与模型连接信息。模型配置变量是：
+
+```dotenv
+BUILDMEDIC_MODEL_BASE_URL=https://your-provider.example/v1
+BUILDMEDIC_MODEL_API_KEY=your-server-side-key
+BUILDMEDIC_MODEL_ID=your-explicit-model-id
+```
+
+DeepSeek 官方服务的配置和连接检查见 [DeepSeek 接入说明](docs/deepseek.md)。创建任务页可读取模型列表检查鉴权，也可运行 `uv run python scripts/check_model.py`；此检查不触发付费生成。
+
+`MODEL_BASE_URL` 指兼容服务的 API 根地址，程序在其后追加 `/chat/completions`。服务须支持 JSON 对象输出与 `max_tokens` 参数。不自动选择模型；缺少配置时任务保留真实复现证据，结束为 `blocked`。费用未设置计价来源时始终显示未知。
+
+默认使用 Docker Runner。构建预装 pytest 的镜像并记录实际 image ID：
+
+```sh
+uv run python scripts/build_runner.py
+```
+
+把输出的 `sha256:...` 填入 `BUILDMEDIC_RUNNER_IMAGE`，然后启动三个后端进程和 Vite：
+
+```sh
+uv run python scripts/dev.py --web
+```
+
+访问 `http://127.0.0.1:5173`，API 文档位于 `http://127.0.0.1:8000/docs`。Vite 代理 `/api`，浏览器无需接触 Runner 或模型密钥。
+
+无 Docker 时，仅在你信任案例与模型生成代码的开发机器上，显式选择本机进程执行：
+
+```sh
+uv run python scripts/dev.py --trusted-local --web
+```
+
+该模式不提供容器隔离。它仍使用真实 pytest 进程和独立源码副本，不会用内置参考补丁冒充模型结果。
+
+构建前端后可由 API 同域提供页面：
+
+```sh
+cd apps/web
+npm run build
+cd ../..
+uv run python scripts/dev.py
+```
+
+## 队列与数据库
+
+默认数据库为 `var/buildmedic.db`，默认 Worker 持续领取数据库 outbox 中的任务。API 不执行长任务。
+
+若使用 PostgreSQL / Redis，可通过 `infra/compose.yaml` 启动基础服务，然后设置 `.env`：
+
+```dotenv
+BUILDMEDIC_DATABASE_URL=postgresql+psycopg://buildmedic:YOUR_PASSWORD@127.0.0.1:5432/buildmedic
+BUILDMEDIC_REDIS_URL=redis://127.0.0.1:6379/0
+BUILDMEDIC_QUEUE_BACKEND=celery
+```
+
+分别运行 API、Runner、outbox dispatcher 和 Celery：
+
+```sh
+uv run uvicorn buildmedic.api:app --host 127.0.0.1 --port 8000
+uv run uvicorn buildmedic.runner:app --host 127.0.0.1 --port 8001
+uv run python -m buildmedic.worker --dispatch
+uv run celery -A buildmedic.worker:celery_app worker --concurrency=1 --loglevel=INFO
+```
+
+`compose.yaml` 只启动基础存储，Runner 应在独立执行节点运行。当前会话与配额适用于本地开发，尚未提供正式登录及公开服务的全局配额。完整部署边界见 [架构说明](docs/architecture.md)。
+
+## 验证
+
+```sh
+uv run --extra adaptive pytest
+uv run --extra adaptive python scripts/export_contracts.py
+cd apps/web
+npm run build
+npx playwright install --with-deps chromium
+npm run test:e2e
+```
+
+后端日常测试中的模型是明确标注的测试替身，目标检查、回归和独立验证启动真实 pytest 子进程。另有显式运行的 `npm run test:live`，通过浏览器连接真实服务与模型，会产生模型用量；执行方式和结果见 [验证记录](docs/verification.md)。
+
+当前已验证：105 项后端检查、额外 3 项 Docker 回归、10 项 fixture 浏览器检查、标准、自适应与经验管理的真实模型页面验收及 TypeScript/Vite 生产构建。经验库默认关闭，开启后按会话和领域冻结输入，独立验证通过后手动发布。GitHub Actions 尚未触发远端验收；PostgreSQL/Redis 故障验收、登记远程仓库和离线对照评测继续推进。
+
+## 工程入口
+
+- `buildmedic/api.py`：HTTP API、会话与事件订阅。
+- `buildmedic/orchestration.py`：标准诊断、预算、取消与独立验收。
+- `scripts/check_model.py`：模型列表检查与显式的小额生成检查。
+- `buildmedic/adaptive.py`：原生 Harness² 调度与受限 HTTP 执行桥。
+- `buildmedic/experiences.py`：同域经验版本、冻结输入和带证据的发布。
+- `buildmedic/worker.py`：outbox、Celery 与失效租约回收。
+- `buildmedic/runner.py`：内部固定检查执行服务。
+- `buildmedic/store.py`：快照、事件、产物、幂等与 fencing。
+- `apps/web/src/`：React 工作台及 Zod 合同校验。
+- `packages/contracts/`：后端导出的 OpenAPI / JSON Schema。
+- `tests/`：后端和真实 Runner 集成。
+- `apps/web/tests/`：日常浏览器场景与独立的真实模型验收。
+- `scripts/migrate.py`：数据库升级与严格的旧库接管。
+
+[下一阶段与 Harness² 接入](docs/harness.md) · [任务经验管理](docs/experience.md) · [接口说明](docs/api.md) · [开发验证记录](docs/verification.md)
+
+开发指南、凭据、缓存、依赖目录和运行数据由 `.gitignore` 排除。此工作区已有本地 Git 元数据保存在 `.git-local`，在此工作区使用 `git --git-dir=.git-local ...`。

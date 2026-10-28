@@ -1,0 +1,125 @@
+{
+  "$defs": {
+    "Limits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_wall_seconds": {
+          "default": 600,
+          "maximum": 1200,
+          "minimum": 30,
+          "title": "Max Wall Seconds",
+          "type": "integer"
+        },
+        "max_model_calls": {
+          "default": 8,
+          "maximum": 12,
+          "minimum": 1,
+          "title": "Max Model Calls",
+          "type": "integer"
+        },
+        "max_tokens": {
+          "default": 48000,
+          "maximum": 150000,
+          "minimum": 8192,
+          "title": "Max Tokens",
+          "type": "integer"
+        }
+      },
+      "title": "Limits",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "default": "demo",
+          "enum": [
+            "demo",
+            "github_actions"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "case_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Case Id"
+        },
+        "run_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Url"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "run_attempt": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Attempt"
+        }
+      },
+      "title": "Source",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "source": {
+      "$ref": "#/$defs/Source"
+    },
+    "mode": {
+      "default": "standard",
+      "enum": [
+        "standard",
+        "adaptive"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "limits": {
+      "$ref": "#/$defs/Limits"
+    },
+    "experience": {
+      "default": false,
+      "title": "Experience",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "source"
+  ],
+  "title": "CreateTask",
+  "type": "object"
+}

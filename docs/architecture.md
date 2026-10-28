@@ -1,0 +1,34 @@
+# 架构与信任边界
+
+```mermaid
+flowchart LR
+  B[React 浏览器] --> A[FastAPI]
+  A --> D[(SQL 数据库)]
+  D --> W[Worker / outbox]
+  W --> M[模型 API]
+  W --> G[GitHub 只读 API]
+  W --> R[内部 Runner]
+  R --> C[断网测试容器]
+  W --> D
+  A -->|持久 SSE 与下载| B
+```
+
+API 在创建事务中同时写入 task、初始事件和 outbox；Worker 通过任务行锁领取并生成新的 lease token。重复消息不能领取第二次有效执行。PostgreSQL 使用事务 advisory lock 串行化同一会话的创建，SQLite 开发模式使用 `BEGIN IMMEDIATE`。
+
+每次状态与产物写入核对有效 token 和心跳。回收者先更换 token，再清理旧 Runner execution，最后标记 interrupted。旧 Worker 的迟到写入被拒绝，不自动覆盖旧历史或复用不完整结果。重试创建关联新任务。
+
+事件持久存在数据库中，seq 在快照更新的同一事务递增。订阅先读取快照游标，重连优先使用 Last-Event-ID，按序补发；HTTP 流断开不取消任务。前端按 seq 去重并重新读取权威快照，另以轮询恢复最终状态。
+
+源码与日志是数据，不具有控制权限。模型没有任意 shell 工具；它只能交付经过 schema 和证据 ID 检查的源码 diff。Runner 接收 case ID、固定 check ID 和受校验补丁，不接收任意命令。每次执行从登记案例生成干净副本。补丁不能修改测试、配置、依赖或 workflow。
+
+候选检查与最终验收使用不同 execution ID 和全新副本。通过条件包括：原目标失败指纹匹配、进程成功、非零测试收集、完整回归通过、原有测试身份未消失、跳过未增加、命令与环境/测试指纹一致，以及选中 patch hash 一致。JUnit 是验证依据之一，不能以模型自述代替 Runner 结果。
+
+Docker 测试容器非 root、只读系统和源码挂载、独立可写产物目录、断网、禁用 capabilities/提权，并限制 CPU、内存、PID、文件大小及时间。Docker socket 仅属于 Runner 所在的高权限执行边界。产物目录不包含源码，避免可写挂载绕过源码只读限制。
+
+当前 Runner 仅支持登记的本地演示案例。可信本机模式不提供容器隔离。接收陌生仓库、公开部署、磁盘配额、容器 OOM 精确分类、保留期与强隔离仍需要单独设计和部署验收。
+
+当前 artifacts 的文本内容保存在数据库中，保证下载内容、证据及 hash 原子一致；大产物和保留期清理留到后续对象存储阶段。原始测试日志在入库前脱敏，patch 如需要脱敏会直接拒绝，避免归档时改变已验证的字节。
+
+API 与 Worker 不再隐式自动建表，启动时核对 Alembic head。`scripts/migrate.py` 负责升级；接管旧数据库必须显式选择 `--adopt-existing`，逐表比较结构，SQLite 先做一致备份。
+
+模型既可交付严格 unified diff，也可交付路径、唯一原文片段与替换文本。后者由平台生成 diff，并继续应用相同的源码范围、大小、上下文、测试完整性、补丁哈希与独立验收约束；原始模型响应保留为独立产物。
