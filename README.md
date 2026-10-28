@@ -15,6 +15,7 @@ CI 失败诊断与补丁验证工作台。通过 React 页面创建任务，Pyth
 - Harness² k=1 顺序优化：真实策略提议、4 个独立 rollout、组合策略差异与最终独立验收。
 - 真实模型的 Chat Completions 兼容接口；调用前预算预留、缺失用量标记、格式与证据引用校验。
 - 可选原生 Agent 工具循环：按需读取证据、检索源码、提交候选、请求固定检查并交付诊断；标准和 Harness² 共享预算与独立验收，见[工具说明](docs/agent-tools.md)。
+- 固定公开开发集的标准 / Harness² 同预算对照：执行前登记、断点恢复、冻结证据、离线复算与策略对比页，见[评测说明](docs/evaluation.md)。
 - GitHub Actions Run 预览与固定 attempt 的 Job 读取。已登记的仓库 / SHA / workflow / Job 可进入固定 Docker 环境，进行标准或自适应修复；未登记来源只做日志诊断。登记表默认留空，见[远程仓库接入](docs/remote.md)。
 
 ## 本地开发
@@ -120,7 +121,7 @@ npm run test:e2e
 
 后端日常测试中的模型是明确标注的测试替身，目标检查、回归和独立验证启动真实 pytest 子进程。另有显式运行的 `npm run test:live`，通过浏览器连接真实服务与模型，会产生模型用量；执行方式和结果见 [验证记录](docs/verification.md)。
 
-当前已验证：152 项日常后端检查、额外 13 项容器环境检查、13 项 fixture 浏览器检查、标准、自适应、经验管理与标准工具循环的真实模型页面验收及 TypeScript/Vite 生产构建。经验库默认关闭，开启后按会话和领域冻结输入，独立验证通过后手动发布。远程管线已有真实 Docker + 模拟 GitHub/模型的集成验收，尚未触发真实失败 Run 的远端验收；PostgreSQL/Redis 故障验收与离线对照评测继续推进。
+当前已验证：166 项日常后端检查、额外 13 项容器环境检查、15 项 fixture 浏览器检查、标准、自适应、经验管理、标准工具循环与开发集对照的真实模型验收及 TypeScript/Vite 生产构建。真实同预算对照中两组均 3/3 通过公开检查，固定策略消耗 9,327 Token，Harness² 消耗 145,108 Token；尚未显示通过数收益。经验库默认关闭，开启后按会话和领域冻结输入，独立验证通过后手动发布。真实远程失败 Run、PostgreSQL/Redis 故障验收与隐藏行为评测仍待完成。
 
 ## 工程入口
 
@@ -129,6 +130,7 @@ npm run test:e2e
 - `scripts/check_model.py`：模型列表检查与显式的小额生成检查。
 - `buildmedic/adaptive.py`：原生 Harness² 调度与受限 HTTP 执行桥。
 - `buildmedic/agent_tools.py`：原生工具协议、任务内证据与候选检查循环。
+- `buildmedic/evaluation.py`：预登记对照、证据冻结、公开指标与离线复算。
 - `buildmedic/experiences.py`：同域经验版本、冻结输入和带证据的发布。
 - `buildmedic/profiles.py`、`buildmedic/snapshots.py`：登记配置、受限归档与固定提交缓存。
 - `buildmedic/worker.py`：outbox、Celery 与失效租约回收。
@@ -140,7 +142,8 @@ npm run test:e2e
 - `apps/web/tests/`：日常浏览器场景与独立的真实模型验收。
 - `scripts/migrate.py`：数据库升级与严格的旧库接管。
 - `scripts/register_profile.py`：下载固定提交并生成待核对的登记文件。
+- `scripts/run_evaluation.py`、`scripts/recompute_evaluation.py`：恢复运行与断网复算开发对照。
 
-[Harness² 接入](docs/harness.md) · [Agent 工具诊断](docs/agent-tools.md) · [远程仓库接入](docs/remote.md) · [任务经验管理](docs/experience.md) · [接口说明](docs/api.md) · [开发验证记录](docs/verification.md)
+[Harness² 接入](docs/harness.md) · [Agent 工具诊断](docs/agent-tools.md) · [开发集评测](docs/evaluation.md) · [远程仓库接入](docs/remote.md) · [任务经验管理](docs/experience.md) · [接口说明](docs/api.md) · [开发验证记录](docs/verification.md)
 
 开发指南、凭据、缓存、依赖目录和运行数据由 `.gitignore` 排除。此工作区已有本地 Git 元数据保存在 `.git-local`，在此工作区使用 `git --git-dir=.git-local ...`。

@@ -278,6 +278,10 @@ class Context:
 
     async def call_model(self, messages, *, role="diagnosis", label="", harness_hash="", tools=None):
         self.guard()
+        if self.snap.get("experiment_binding"):
+            from .evaluation import assert_runtime
+
+            assert_runtime(self.snap["experiment_binding"])
         reservation = (
             len(
                 json.dumps(
@@ -712,6 +716,10 @@ async def run_claimed(task_id, claimed, *, runner=None, model=None, validation_j
     ctx = Context(task_id, token, body, snap, runner=runner, model=model)
     hb = asyncio.create_task(ctx.heartbeat())
     try:
+        if snap.get("experiment_binding") and not validation_job:
+            from .evaluation import assert_runtime
+
+            assert_runtime(snap["experiment_binding"])
         if (
             body.get("agent_tools")
             and not validation_job

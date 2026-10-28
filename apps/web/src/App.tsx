@@ -39,6 +39,7 @@ import {
 import { z } from "zod";
 import { api, artifactUrl, readArtifact } from "./api";
 import { AgentActions } from "./AgentActions";
+import { Experiments, ExperimentDetail } from "./Experiments";
 import {
   ExperienceLibrary,
   ExperienceDetail,
@@ -221,7 +222,7 @@ export default function App() {
           </NavLink>
           <NavLink to="/experiments" onClick={() => setOpen(false)}>
             <FlaskConical size={18} />
-            策略对比<span className="nav-tag">P2</span>
+            策略对比
           </NavLink>
           <NavLink to="/experience" onClick={() => setOpen(false)}>
             <FileCode2 size={18} />
@@ -284,7 +285,8 @@ export default function App() {
             <Route path="/tasks/new" element={<NewTask />} />
             <Route path="/tasks" element={<TaskList />} />
             <Route path="/tasks/:id" element={<TaskDetail />} />
-            <Route path="/experiments" element={<Experiment />} />
+            <Route path="/experiments" element={<Experiments />} />
+            <Route path="/experiments/:id" element={<ExperimentDetail />} />
             <Route path="/experience" element={<ExperienceLibrary />} />
             <Route path="/experience/:id" element={<ExperienceDetail />} />
             <Route
@@ -2280,22 +2282,5 @@ function HarnessDiff({
         </>
       )}
     </article>
-  );
-}
-function Experiment() {
-  return (
-    <>
-      <PageTitle
-        eyebrow="EVIDENCE BEFORE METRICS"
-        title="策略对比"
-        description="在相同任务集与预算下，比较真实成功数、耗时和成本。"
-      />
-      <section className="panel">
-        <Empty
-          title="尚无已完成的离线评测"
-          description="此功能属于 P2。固定策略、多次尝试和 Harness² 的对照结果将在真实评测完成后展示。"
-        />
-      </section>
-    </>
   );
 }

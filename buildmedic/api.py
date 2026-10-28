@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import db, experiences, store
+from . import db, evaluation, experiences, store
 from .cases import CASES, metadata
 from .clients import ModelClient, RunnerClient
 from .config import settings
@@ -303,6 +303,50 @@ def list_tasks(
     page_size: int = Query(20, ge=1, le=100),
 ):
     return envelope(request, store.list_tasks(request.state.owner, lifecycle, repo, page, page_size))
+
+
+@app.post("/api/v1/experiments", status_code=201)
+def create_experiment(
+    request: Request, body: evaluation.ExperimentSpec, idempotency_key: str = Header(default="")
+):
+    require_key(idempotency_key)
+    # Creation is a local preregistration. Actual model/Runner readiness is checked on execution.
+    eid = evaluation.create(request.state.owner, idempotency_key, body)
+    return envelope(request, evaluation.get(eid, request.state.owner))
+
+
+@app.get("/api/v1/experiments")
+def list_experiments(request: Request, page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=50)):
+    return envelope(request, evaluation.listing(request.state.owner, page, page_size))
+
+
+@app.get("/api/v1/experiments/{eid}")
+def get_experiment(eid: str, request: Request):
+    return envelope(request, evaluation.get(eid, request.state.owner))
+
+
+@app.post("/api/v1/experiments/{eid}/advance")
+def advance_experiment(eid: str, request: Request):
+    return envelope(request, evaluation.advance(eid, request.state.owner, check_task=check_mode))
+
+
+@app.post("/api/v1/experiments/{eid}/cancel")
+def cancel_experiment(eid: str, request: Request):
+    evaluation.cancel(eid, request.state.owner)
+    return envelope(request, evaluation.get(eid, request.state.owner))
+
+
+@app.get("/api/v1/experiments/{eid}/report")
+def experiment_report(eid: str, request: Request):
+    report = evaluation.export_report(eid, request.state.owner)
+    return Response(
+        json.dumps(report, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="experiment-{report["id"]}.json"',
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @app.get("/api/v1/tasks/{tid}", response_model=Envelope[TaskSnapshot])

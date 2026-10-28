@@ -114,6 +114,18 @@ experience_snapshots = Table(
     Column("content_hash", String(64), nullable=False),
     Column("content", JSON, nullable=False),
 )
+experiments = Table(
+    "experiments",
+    metadata,
+    Column("id", String(40), primary_key=True),
+    Column("owner_id", String(80), nullable=False, index=True),
+    Column("idempotency_key", String(128), nullable=False),
+    Column("request_hash", String(64), nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("status", String(20), nullable=False),
+    Column("content", JSON, nullable=False),
+    UniqueConstraint("owner_id", "idempotency_key"),
+)
 
 
 def make_engine(url=None):

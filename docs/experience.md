@@ -49,4 +49,4 @@ Worker 将冻结内容还原到 `<data_dir>/harness/<task>/<lease>/library`。�
 
 Alembic `0002` 新建两个表；已有 `0001` 数据库可原地升级，不重建或清空任务。`scripts/dev.py` 启动前自动升级，单独运行服务前执行 `uv run --extra adaptive python scripts/migrate.py`。
 
-尚未实现离线相同预算对照评测、held-out 数据分割或经验收益指标；没有把本地案例重复运行视为泛化评测。PostgreSQL 的发布并发与 Redis 故障恢复还需专门的运行环境验收。
+已有[公开开发集同预算对照](evaluation.md)，其中经验库关闭。held-out 数据分割、冻结经验的效果对照和经验收益指标尚未实现；没有把本地案例重复运行视为泛化评测。PostgreSQL 的发布并发与 Redis 故障恢复还需专门的运行环境验收。

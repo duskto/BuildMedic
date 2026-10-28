@@ -11,7 +11,7 @@ pytest.importorskip("harness2")
 
 from harness2.core.proposer import Proposer
 
-from buildmedic import experiences, store
+from buildmedic import evaluation, experiences, store
 from buildmedic import runner as runner_module
 from buildmedic.adaptive import BASE_DIR, BoundedSubstrate, pack_context, trees, validate_strategy
 from buildmedic.cases import metadata
@@ -419,3 +419,67 @@ def test_adapter_satisfies_the_pinned_runtime_protocol(adaptive_environment, tmp
     assert adapter.spec.channels["proposer"].kind == "buildmedic_http"
     assert adapter.substrate.name == "bounded-http"
     assert adapter.substrate.surface().name == "opencode"  # layout, not an executable channel
+
+
+def test_preregistered_comparison_freezes_real_execution_and_recomputes(adaptive_environment):
+    from sqlalchemy import update
+
+    from buildmedic import db
+
+    spec = evaluation.ExperimentSpec(
+        name="scripted-real-pytest-comparison",
+        cases=[
+            evaluation.EvaluationCase(
+                case_id="pagination", snapshot_sha256=metadata("pagination")["snapshot_sha256"]
+            )
+        ],
+    )
+    eid = evaluation.create("owner", "development-comparison", spec)
+    ids = []
+    while True:
+        item = evaluation.advance(eid, "owner")
+        if not item["task_id"]:
+            break
+        tid = item["task_id"]
+        ids.append(tid)
+        run(run_claimed(tid, store.claim(tid), runner=InProcessRunner(), model=ScriptedAdaptiveModel()))
+    report = evaluation.get(eid, "owner")
+    assert report["status"] == "completed" and report["finished"] == report["planned"] == 2
+    assert [s["public_verified"] for s in report["summary"]] == [1, 1]
+    assert [s["calls"] for s in report["summary"]] == [1, 7]
+    assert [s["checks"] for s in report["summary"]] == [6, 12]
+    assert all(s["cost_usd"] is None and s["cost_per_public_verified"] is None for s in report["summary"])
+    assert report["environment_consistent"] is True
+    assert report == evaluation.get(eid, "owner")
+    exported = evaluation.export_report(eid, "owner")
+    assert evaluation.recompute(exported) == report
+    exported["summary"][0]["public_verified"] = 999
+    with pytest.raises(store.Conflict, match="复算"):
+        evaluation.recompute(exported)
+    # Later task mutations/revalidation cannot rewrite this comparison's frozen end report.
+    snap = store.snapshot(ids[0])
+    snap["usage"]["tokens"] += 99999
+    with db.transaction() as conn:
+        conn.execute(update(db.tasks).where(db.tasks.c.id == ids[0]).values(snapshot=snap))
+    assert report == evaluation.get(eid, "owner")
+    assert all(
+        row["report"]["artifact_id"] and row["metrics"]["hidden_verified"] is None for row in report["rows"]
+    )
+
+
+def test_preregistered_task_stops_before_paid_call_after_config_change(adaptive_environment, monkeypatch):
+    spec = evaluation.ExperimentSpec(
+        name="configuration-drift",
+        cases=[
+            evaluation.EvaluationCase(
+                case_id="pagination", snapshot_sha256=metadata("pagination")["snapshot_sha256"]
+            )
+        ],
+    )
+    eid = evaluation.create("owner", "development-drift", spec)
+    tid = evaluation.advance(eid, "owner")["task_id"]
+    monkeypatch.setattr(settings(), "max_output_tokens", 100)
+    model = ScriptedAdaptiveModel()
+    run(run_claimed(tid, store.claim(tid), runner=InProcessRunner(), model=model))
+    snap = store.snapshot(tid)
+    assert snap["outcome"] == "blocked" and model.calls == [] and snap["executions"] == []

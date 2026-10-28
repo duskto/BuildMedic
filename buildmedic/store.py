@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import uuid
+from contextlib import nullcontext
 
 from sqlalchemy import func, select, update
 
@@ -109,9 +110,9 @@ def lock_owner(conn, owner):
         conn.execute(select(func.pg_advisory_xact_lock(lock_id)))
 
 
-def create(owner, key, body, source_meta, parent_id=None):
+def create(owner, key, body, source_meta, parent_id=None, *, connection=None):
     digest = request_hash(body, parent_id)
-    with db.transaction() as conn:
+    with db.transaction() if connection is None else nullcontext(connection) as conn:
         # Serialize an owner's empty task set too, avoiding concurrent quota/idempotency races.
         lock_owner(conn, owner)
         existing = (

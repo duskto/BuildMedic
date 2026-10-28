@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "name": "public-development-v1",
+  "dataset": "public-development",
+  "cases": [
+    {
+      "case_id": "pagination",
+      "snapshot_sha256": "33ebbbb192dbde79de07123ab57237ca672cd5fe4146d7b2731a6f6e571e949e"
+    },
+    {
+      "case_id": "imports",
+      "snapshot_sha256": "234321f8ea43b6d11b17edf45cf0d89d445fe4123b8f90bb6fdd5082095f0dad"
+    },
+    {
+      "case_id": "signature",
+      "snapshot_sha256": "fb0c60c56130f08406b887ac7a380f6b266106802c9b1e7663af5a98dd81b618"
+    }
+  ],
+  "repeats": 1,
+  "agent_tools": false,
+  "limits": {
+    "max_wall_seconds": 600,
+    "max_model_calls": 12,
+    "max_tokens": 100000
+  }
+}

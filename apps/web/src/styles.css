@@ -11,6 +11,16 @@
   --muted: #7c8a88;
   --ink: #172c29;
 }
+.experiment-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.panel.padded {
+  padding: 24px;
+  margin-bottom: 24px;
+}
 * {
   box-sizing: border-box;
 }
