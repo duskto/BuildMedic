@@ -35,4 +35,4 @@ Worker 先重新查询公开仓库、固定 Run attempt 和 Job，检查与创�
 
 新表通过 Alembic `0005` 创建。现有环境运行 `.venv/bin/python scripts/migrate.py` 后再启动 API / Worker；0004 升级保留任务和产物。缓存不提供浏览器直接查询接口，访问日志和来源记录仍沿用任务 owner 校验。
 
-重试、临时下载链接、会话隔离、固定版本关联、损坏 / 过期处理、并发漂移、容量清理和页面显示均有明确的 HTTP / UI fixture 检查。真实 GitHub 失败 Run 的日志与登记环境端到端验收仍待执行。
+重试、临时下载链接、会话隔离、固定版本关联、损坏 / 过期处理、并发漂移、容量清理和页面显示均有明确的 HTTP / UI fixture 检查。真实 GitHub 失败 Run 的网页 / 模型 / Docker 闭环已验收，另核对在线重新查询后同会话缓存命中、无新增模型调用，见 [真实验收](github-acceptance.md)。

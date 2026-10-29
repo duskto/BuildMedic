@@ -1,16 +1,16 @@
 # 开发验证记录
 
-日期：2026-10-28，版本 `0.2.0`。**已完成 P0 的本地标准诊断闭环验收：浏览器创建任务、真实 DeepSeek 生成修复、Docker 复现与独立回归、刷新后读取持久结果。** 范围为三个登记的开发案例，不代表任意仓库或远端 CI 已通过。
+最近更新：2026-10-29，版本 `0.2.0`。**已完成 P0 本地标准诊断及一个登记公开案例的 P1 真实远程网页闭环验收。** 实际 DeepSeek、原生 Harness²、Docker 独立检查、刷新恢复及验收分支的 GitHub 复跑均有证据；范围限登记开发案例，不代表任意仓库、正式部署或策略收益。
 
 ## 已执行的检查
 
 | 检查 | 结果与范围 |
 | --- | --- |
-| 后端与集成测试 | 268 项日常检查通过；默认跳过 14 项需要显式容器环境的检查 |
-| Docker Runner 与远程管线回归 | 额外 14 项通过；本地案例、登记远程快照、原生自适应、工具循环、独立行为评分、重新验证及拒绝/取消边界 |
+| 后端与集成测试 | 308 项日常检查通过；默认跳过 20 项需要显式容器环境的检查 |
+| Docker Runner 与远程管线回归 | 额外 20 项通过；本地案例、登记远程快照、原生自适应、工具循环、独立行为评分、重新验证及拒绝/取消边界 |
 | Python 静态检查 | `ruff check buildmedic scorer_service tests scripts migrations` 通过 |
 | 前端安装与构建 | npm 锁文件已生成；TypeScript 严格检查和 Vite 生产构建通过 |
-| 日常浏览器检查 | 26 项 Chromium 检查通过，使用明确的 API fixture，不请求模型 |
+| 日常浏览器检查 | 31 项 Chromium 检查通过，使用明确的 API fixture，不请求模型 |
 | 真实浏览器验收 | 标准模式、自适应、经验管理、标准工具循环、两组 / 四组对照及独立行为评分页面通过；覆盖真实发布、冻结复用、会话隔离与撤销 |
 | 模型连通与生成 | `/models` 鉴权、模型存在检查及真实 JSON 生成通过 |
 | 数据库迁移 | SQLite 升降级、0001 / 0004 → 0005 任务及产物保留、元数据一致性、旧库备份接管与结构漂移拒绝已验证 |
@@ -67,11 +67,11 @@ npm run test:live
 
 可用 `BUILDMEDIC_ACCEPTANCE_URL` 指向其他受信任的本地验收地址。真实验收与日常 fixture 测试的输出目录分别为 `test-results/live` 和 `test-results/ui`。
 
-GitHub Actions 已添加后端、Web 与 Docker 检查工作流；远端工作流尚未在本轮触发，不声称远端 CI 已通过。CI 不运行 `test:live`，不需要模型密钥。
+GitHub Actions 已添加后端、Web 与 Docker 检查工作流。已从 GitHub 核对 main 的 [Run 40706272190](https://github.com/duskto/BuildMedic/actions/runs/40706272190)，后端、Web 与 Docker 三个 Job 均成功，绑定提交 `e1fd22a8493e1bfbe2042bab4db7497b0f84edec`。这只说明该已推送提交的项目检查通过，不覆盖之后的本地未提交代码。CI 不运行 `test:live`，不需要模型密钥。
 
 ## 下一阶段
 
-尚未完成 PostgreSQL / Celery / Redis 的实际分发故障验收、真实远程失败 Run 的端到端验收、诊断准确率与分组隔离测试集评测及公开部署。登记远程快照执行已有真实 Docker 集成检查，GitHub 与模型为明确测试替身；本地 `adaptive`、公开开发集两组 / 四组对照及其独立私有行为评分已验收。不同节点 / 账号的部署隔离仍待验证；P1/P2 未标记整体完成。
+尚未完成 PostgreSQL / Celery / Redis 的实际分发故障验收、诊断准确率与分组隔离测试集评测及公开部署。一个登记公开案例的真实远程网页闭环已通过 P1 核心验收；本地 `adaptive`、公开开发集两组 / 四组对照及独立私有行为评分已验收。不同节点 / 账号的部署隔离、其他仓库 / 复杂环境和带工具远程模式仍待验证，P2 未整体完成。
 
 ## Harness² 增量验收
 
@@ -174,3 +174,33 @@ file_count: 22
 缓存检查覆盖会话及仓库 / Run / attempt / Job / SHA 隔离、大小与有效期、脱敏规则变化、损坏重新下载、容量清理、并发内容漂移拒绝，以及命中前重新核对远端身份。Worker 检查实际归档来源和日志指纹，版本发生变化时停止。浏览器核对限流时间、表单保留和下载 / 复用来源记录。
 
 0004 → 0005 迁移检查保留任务与日志产物；本地数据库另先做 SQLite 备份后升级，38 个已有任务全部保留。真实 GitHub 仓库元数据请求返回 `github_rate_limited`，因此没有将该次请求计为联网验收成功，也没有进行真实失败 Run 或日志验收。测试日志位于忽略目录 `var/qa/github-{backend,docker,ui}.log`。本轮没有新增真实模型调用，使用与边界见 [GitHub 读取](github-ingestion.md)。
+
+## Runner 资源故障与清理增量验收
+
+2026-10-29：307 项日常后端检查、额外 20 项真实 Docker 检查、31 项 fixture 浏览器检查、Ruff、合同导出与 TypeScript / Vite 构建通过。退出事实使用新增的可选合同，历史任务无需数据库迁移。原生 Harness²、四组评测及登记远程管线继续通过回归；没有新增真实模型调用。
+
+固定 Docker 镜像中实际触发了 128 MiB 内存限制下的 OOM、显式退出码 137、Docker 外部 SIGKILL、超时、输出超限和用户取消。核对原始退出码与 OOM 标记、任务不被误判通过、终态发布前容器移除与工作目录清理，以及删除容器 / 重启 Runner 后仍能读取退出事实。首次用例尝试从容器 PID 1 内自发信号没有造成预期退出，随后改用 daemon 侧外部 SIGKILL 明确制造终止；该用例与显式退出 137 分开记录，不据退出码臆测 OOM。
+
+后端另覆盖实际本机 SIGTERM、非法 UTF-8 输出、创建期间取消、清理完成前仍显示运行中、目录清理失败、Docker 身份不匹配不删除、服务异常不冒称容器消失、清理重试和重启保留原始 OOM 事实。Worker 资源故障保持零模型调用，清理失败保留中断，取消后归档最终 Runner 事实及日志。独立验收拒绝带乐观 passed 标记但状态 / 清理未确认或发生 OOM 的结果。
+
+浏览器核对 OOM、超时、异常退出、清理未确认和恢复后的原始故障提示，并检查窄屏无横向溢出及无脚本错误。合成故障的真实容器观测摘要在忽略目录 `var/acceptance/runtime-faults.json`，测试日志在 `var/qa/runtime-{backend,docker,ui}.log`。Docker 服务故障与恢复使用管理接口替身，不宣称完成多节点故障或真实 GitHub 失败 Run 验收。限额、恢复方法及 stdout 监测边界见 [Runner 故障处理](runner-failures.md)。
+
+## 真实 GitHub Run 读取与复现
+
+2026-10-29：通过独立验收分支产生真实失败 [Run 40837098943](https://github.com/duskto/BuildMedic/actions/runs/40837098943)，attempt 1、Job `123324334613`、固定提交 `ae674195202ce5192ea9a38d08382a1ecad96c5e`。GitHub 的 pytest Job 实际报告 2 failed / 6 passed；从真实 codeload 归档登记并在固定 Docker 镜像中执行，同样为 2 failed / 6 passed，原问题指纹匹配且容器清理确认通过。该案例明确带已知缺陷，只作为接入验收，不作为新评测样本。
+
+GitHub 运行元数据和日志经已连接的 GitHub 插件读取。登记脚本真实下载并校验该 SHA，Docker 复现没有使用 HTTP fixture 或替代源码。第二次归档下载曾遇到临时连接故障，重试后完成。绑定、日志及归档复现分别保存在忽略目录 `var/acceptance/github-real-binding.json`、`github-real-ci.log`、`github-real-reproduction.json`，绑定文件包含证据 hash。
+
+新增付费验收脚本 `apps/web/tests/live/github.spec.ts`，核对固定 Run / SHA / Job、原生 Harness²、独立验证、刷新和会话隔离，支持恢复同一任务。该阶段先通过严格 TypeScript、加载和生产构建检查，当时因本地匿名额度耗尽而尚未执行付费流程；配置只读凭据后的完整结果记录在下一节。
+
+## 真实远程网页、模型修复与 GitHub 复跑
+
+已用本机凭据从网页提交真实失败 Run，未替换 GitHub 或模型 HTTP 请求。首轮任务 `b8c3fab94b81497d9d5d866f4abbd04f` 在 100,000 额度下发生两次策略格式拒绝，组合阶段前触发保守预留；实际 6 次调用 / 52,963 Token，保留 budget_exhausted。随后新增显式 150,000 选项，仅用于新建登记远程自适应任务；已有任务和关联重试的上限保持原值，已由 API 与 UI 回归验证。
+
+新任务 `31c3aff1d1f14c15b1008e7e8d219658` 用 7 次调用 / 65,432 Token 完成 4 个 rollout、3 个实际修改的策略提议，12 次初验 Docker 检查，最终独立目标和回归均 8/8。实际选中 patch 只修改源码的一行，指纹为 `16b92e9deb3fd686629dca62c8ea3f899aefe8021de3175289962562e47efe45`。两轮合计 13 次 / 118,395 Token，费用未知；没有删除失败成本或据此声称策略收益。
+
+页面恢复、报告及 patch 下载指纹、跨会话任务 / 下载 404、手机窄屏和无脚本错误检查通过。页面重新独立验证追加 2 次 Docker 检查，仍为目标 / 回归 8/8，调用数及 Token 不变。真实在线重新核对固定 Job 后，同会话日志缓存命中也通过，未新增模型调用。
+
+验收操作将实际选中的模型补丁应用到独立分支，GitHub [Run 40842086320](https://github.com/duskto/BuildMedic/actions/runs/40842086320)、Job `123340615914` 在固定新提交 `8e15265f10c352128ac97f15c288ffc6bcc10db5` 上成功，实际日志为 8 passed。原失败 Run 的任务、提交、报告及证据保持原绑定；这不是产品的自动 PR / 回填功能。
+
+本轮 308 项日常后端、31 项 fixture 浏览器、严格 TypeScript、合同导出和生产构建通过，另有真实网页验收与同任务无新增模型调用的恢复检查。既有 20 项容器集成回归继续保留上一轮通过记录，真实新任务及重新验证另实际执行了 14 次固定镜像检查。完整证据摘要在忽略目录 `var/acceptance/github-acceptance-summary.json`，截图为 `github-live-strategy.png` 和 `github-live-mobile.png`；日志在 `var/qa/github-live-150k.log`、`github-live-resume.log`、`github-final-backend.log`、`github-budget-ui.log`。边界与复现方法见 [真实 GitHub 验收](github-acceptance.md)。

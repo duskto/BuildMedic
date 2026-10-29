@@ -55,9 +55,11 @@ GitHub GET 对暂时连接故障与 500 / 502 / 503 / 504 最多尝试三次；�
 
 内部 Runner API 位于 `/runner/v1`，必须携带独立 Bearer token，不能直接暴露给浏览器。支持 health、提交 execution、读取 execution、取消 execution；结果包含命令、退出原因、日志、JUnit 计数、patch hash、环境与测试指纹。
 
+新执行另含可选 `termination` 和 `resource_limits`，记录 OOM、已确认 / 可能的信号、容器最终状态、资源限额和清理确认。资源故障停止自动修复；清理未确认保持 `interrupted`，取消接口可重试清理。Worker 取消后仍归档最终执行事实，详见 [Runner 故障处理](runner-failures.md)。
+
 任务快照的 `model_calls` 保存逐次调用状态、请求与响应模型、用量与耗时；它只记录可审核的执行事实，不保存 `reasoning_content`。`phase_history` 记录实际到达过的阶段，提前结束后不把未执行阶段显示为完成。
 
-自适应模式 `mode=adaptive` 接受 demo 和已登记的 GitHub Job，需安装固定版本 Harness²、开启服务端开关并配置模型。创建时至少 7 次调用 / 48,000 Token 预算，推荐 12 次 / 100,000。未知能力、未登记的远程来源和不足预算分别返回 `adaptive_unavailable`、`adaptive_source_unsupported`、`adaptive_budget_too_small`。
+自适应模式 `mode=adaptive` 接受 demo 和已登记的 GitHub Job，需安装固定版本 Harness²、开启服务端开关并配置模型。创建时至少 7 次调用 / 48,000 Token 预算；普通本地任务推荐 12 次 / 100,000，登记远程任务推荐 12 次 / 150,000，以容纳完整组合上下文。非工具的远程自适应请求最高 150,000；标准模式与普通本地自适应仍最高 100,000，已有任务及关联重试不自动增加额度。未知能力、未登记的远程来源和不足预算分别返回 `adaptive_unavailable`、`adaptive_source_unsupported`、`adaptive_budget_too_small`。
 
 预览返回每个 Job 的 `execution_supported` 与 `profile_version`；页面据此开启远程自适应入口。任务创建时保存服务器生成的 `runner_profile` 绑定，准备后增加 `source_snapshot` 和 `snapshot.prepared` 事件。该快照含完整性清单与完整 profile 的产物 ID，继续通过任务归属检查后下载。
 

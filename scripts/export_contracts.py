@@ -7,6 +7,7 @@ from buildmedic.api import app
 from buildmedic.evaluation import SPEC_ADAPTER
 from buildmedic.evaluation_analysis import EvaluationAnalysis
 from buildmedic.logs import LogIndex, LogWindow
+from buildmedic.runner_runtime import ExecutionTermination
 from buildmedic.schemas import CreateTask, Diagnosis, ExecutionRequest, TaskEvent, TaskSnapshot
 from buildmedic.scoring_protocol import ScoreReceipt, ScoreRequest
 
@@ -17,6 +18,7 @@ for name, schema in {
     "create-task": CreateTask.model_json_schema(),
     "diagnosis": Diagnosis.model_json_schema(),
     "runner-execution": ExecutionRequest.model_json_schema(),
+    "execution-termination": ExecutionTermination.model_json_schema(),
     "task-snapshot": TaskSnapshot.model_json_schema(),
     "task-event": TaskEvent.model_json_schema(),
     "experiment-spec": SPEC_ADAPTER.json_schema(),

@@ -25,7 +25,7 @@ BUILDMEDIC_ADAPTIVE_ENABLED=true
 uv run --extra adaptive python scripts/dev.py --web
 ```
 
-创建任务时选择演示案例，或预览并选择已登记的 GitHub 失败 Job，然后选择“自适应诊断”。默认推荐 12 次模型调用、100,000 tokens；服务端要求至少 7 次调用与 48,000 tokens。预算不足会正常结束并保留已有证据，不会自动扩大额度。未登记的 GitHub 来源仅开放日志诊断；[远程接入说明](remote.md)介绍如何固定提交与执行环境。
+创建任务时选择演示案例，或预览并选择已登记的 GitHub 失败 Job，然后选择“自适应诊断”。本地默认推荐 12 次模型调用、100,000 tokens；登记远程任务推荐 12 次 / 150,000，以容纳完整组合上下文。服务端要求至少 7 次调用与 48,000 tokens。预算不足会正常结束并保留已有证据，不会自动扩大额度。未登记的 GitHub 来源仅开放日志诊断；[远程接入说明](remote.md)介绍如何固定提交与执行环境。
 
 运行时核对已安装包的 Git URL 和完整 commit。缺少可选依赖、版本不匹配、功能开关关闭或模型未配置时，页面禁用此模式并给出原因。`uv run` 不加 `--extra adaptive` 可能同步回仅包含标准功能的环境，请使用上面的启动命令。
 
@@ -94,6 +94,8 @@ cd apps/web
 npm run test:live -- --grep 'adaptive:'
 ```
 
-远程固定 SHA 快照、登记 profile 与自适应执行已实现，并通过真实 Docker、模拟 GitHub 与脚本模型的集成检查；真实失败 Run 的端到端验收仍待执行。同会话的同域经验发布、公开开发集四组对照及结束后的独立私有行为评分已接通。真实三个修复组均 3/3 通过公开检查，Harness² 消耗更多，未显示通过数收益；日志组只交付未评分诊断，见[评测记录](evaluation.md)。独立评分结果不传入 Proposer / Solver / 反思。诊断准确率与分组隔离测试集评测仍未完成，不能把开发验收称为整个 P1/P2 已完成。
+远程固定 SHA 快照、登记 profile 与自适应执行已通过真实失败 Run 的完整网页验收：任务 `31c3aff1d1f14c15b1008e7e8d219658` 使用 7 次调用 / 65,432 Token，四个 rollout 和三个策略阶段完成，选中补丁经独立目标 / 回归均 8/8 通过。后续验收分支的 GitHub 复跑也成功，完整绑定及首轮预算失败记录见 [真实 GitHub 验收](github-acceptance.md)。这是单个已知公开案例的 P1 核心验收，不是泛化或策略收益评测。
+
+同会话经验发布、公开开发集四组对照及独立私有行为评分已接通。三个修复组均 3/3 通过公开检查，Harness² 消耗更多，未显示通过数收益；日志组只交付未评分诊断，见[评测记录](evaluation.md)。独立评分结果不传入 Proposer / Solver / 反思。诊断准确率、分组隔离测试集及正式部署仍未完成，P2 未整体完成。
 
 上游来源：[spec.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/core/spec.py)、[schedule.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/core/schedule.py)、[recursion.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/core/recursion.py)、[demo.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/demo.py)。

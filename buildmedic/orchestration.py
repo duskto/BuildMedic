@@ -40,6 +40,13 @@ def verification_ok(baseline, target, regression):
     for result in (target, regression):
         if not result.get("passed") or result.get("reason") != "exited":
             reasons.append("目标检查或完整回归未通过")
+        termination = result.get("termination")
+        if termination and (
+            termination.get("cleanup_confirmed") is not True
+            or termination.get("state_confirmed") is not True
+            or termination.get("oom_killed") is True
+        ):
+            reasons.append("执行状态或资源清理未确认，或发生内存耗尽")
     for before, after in zip(baseline, (target, regression)):
         for field in (
             "snapshot_sha256",
@@ -285,17 +292,9 @@ class Context:
             if result["lifecycle"] in {"completed", "cancelled", "interrupted"}:
                 break
             await self.guarded(asyncio.sleep(0.1))
-        self.active.discard(eid)
-        # Do not put unbounded stdout in every task snapshot/event.
-        output = result.pop("stdout", "")
-        art = self.artifact("test_log", output)
-        result["stdout_artifact_id"] = art["id"]
-        self.update(
-            "execution.finished",
-            transform=lambda s: s["executions"].__setitem__(
-                slice(None), [result if e["id"] == eid else e for e in s["executions"]]
-            ),
-        )
+        if result.get("termination", {}).get("cleanup_confirmed") is not False:
+            self.active.discard(eid)
+        result, output = self.record_execution(result)
         if self.remote and any(
             result.get(key) != value
             for key, value in {
@@ -310,8 +309,35 @@ class Context:
             raise Blocked("Runner 执行证据与登记的固定提交或环境不一致")
         if result.get("reason") == "environment_blocked":
             raise Blocked(result.get("message", "复现环境不可用"))
+        failure = {
+            "oom_killed": "执行容器内存耗尽",
+            "timeout": "测试执行超时",
+            "output_limit": "测试日志超过大小上限",
+            "signal": "测试进程被信号终止",
+            "abnormal_exit": "测试进程异常退出，无法确认正常测试结果",
+            "runtime_error": "容器无法正常启动或执行",
+            "container_state_unavailable": "无法读取容器最终状态",
+            "cleanup_unconfirmed": "执行资源清理尚未确认",
+            "runner_error": "Runner 执行异常",
+        }.get(result.get("reason"))
+        if failure:
+            raise Blocked(failure + "，已保留执行证据，停止自动修复")
         if result["lifecycle"] in {"cancelled", "interrupted"}:
             raise Blocked("Runner 执行中断，未取得验证结果")
+        return result, output
+
+    def record_execution(self, result, event="execution.finished"):
+        result = dict(result)
+        # Do not put unbounded stdout in every task snapshot/event.
+        output = result.pop("stdout", "")
+        art = self.artifact("test_log", output)
+        result["stdout_artifact_id"] = art["id"]
+        self.update(
+            event,
+            transform=lambda s: s["executions"].__setitem__(
+                slice(None), [result if e["id"] == result["id"] else e for e in s["executions"]]
+            ),
+        )
         return result, output
 
     async def call_model(self, messages, *, role="diagnosis", label="", harness_hash="", tools=None):
@@ -495,6 +521,13 @@ class Context:
             try:
                 if not await self.runner.cancel(eid):
                     cleaned = False
+                else:
+                    try:
+                        final = await self.runner.get(eid)
+                        if final["lifecycle"] in {"completed", "cancelled", "interrupted"}:
+                            self.record_execution(final, "execution.cleanup_confirmed")
+                    except store.LostLease:
+                        pass
             except Exception:  # noqa: BLE001 - Cleanup must continue for the remaining executions.
                 cleaned = False
         self.active.clear()

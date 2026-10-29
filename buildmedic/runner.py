@@ -22,9 +22,14 @@ from .config import settings
 from .errors import Blocked
 from .patching import apply_patch
 from .profiles import registered
+from .runner_runtime import DockerContainer, ExecutionTermination, classify_exit
 from .schemas import ExecutionRequest, RemoteSnapshot
 from .security import sanitize
 from .snapshots import SnapshotStore, protected_hash
+
+MAX_EXECUTION_SECONDS = 180
+MAX_OUTPUT_BYTES = 2_000_000
+DOCKER_MEMORY = "1g"
 
 
 def parse_junit(path):
@@ -64,25 +69,41 @@ class Engine:
         self.snapshots = SnapshotStore(self.root / "snapshots")
         self.pool = ThreadPoolExecutor(max_workers=2)
         self.lock = threading.RLock()
-        self.jobs, self.processes, self.cancelled = {}, {}, set()
+        self.jobs, self.processes, self.containers, self.stop_reasons = {}, {}, {}, {}
         for file in self.root.glob("*.json"):
             value = json.loads(file.read_text())
-            if value["lifecycle"] in {"queued", "running"}:
+            pending = value.get("termination", {}).get("cleanup_confirmed") is False
+            if value["lifecycle"] in {"queued", "running"} or pending:
+                termination = (
+                    ExecutionTermination.model_validate(value["termination"])
+                    if pending
+                    else ExecutionTermination(cause="runner_restarted")
+                )
                 if self.backend == "docker":
-                    try:
-                        subprocess.run(
-                            ["docker", "rm", "-f", "bm-" + value["id"]],
-                            capture_output=True,
-                            timeout=10,
-                            check=False,
-                        )
-                    except (OSError, subprocess.TimeoutExpired):
-                        pass
-                value.update(lifecycle="interrupted", reason="runner_restarted")
+                    container = self.container(value)
+                    termination.cleanup_confirmed, termination.cleanup_error = container.cleanup()
+                else:
+                    # A previous trusted-local process cannot safely be identified by a reused PID.
+                    termination.cleanup_confirmed = value["lifecycle"] == "queued"
+                    if not termination.cleanup_confirmed:
+                        termination.cleanup_error = "local_process_unconfirmed"
+                if not self.cleanup_workspace(value):
+                    termination.cleanup_confirmed = False
+                    termination.cleanup_error = "workspace_cleanup_failed"
+                value.update(
+                    lifecycle="interrupted",
+                    reason=value.get("reason", "cleanup_unconfirmed") if pending else "runner_restarted",
+                    passed=False,
+                    termination=termination.model_dump(),
+                    finished_at=time.time(),
+                )
                 self._save(value)
             self.jobs[value["id"]] = value
 
     def ready(self):
+        with self.lock:
+            if any(j.get("termination", {}).get("cleanup_confirmed") is False for j in self.jobs.values()):
+                return False, "存在尚未确认清理的执行，请恢复 Runner 并重试清理"
         if self.backend == "trusted-local":
             return True, "可信案例开发模式：本机进程执行，无容器隔离"
         if self.backend != "docker" or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.image):
@@ -136,39 +157,92 @@ class Engine:
         with self.lock:
             return dict(self.jobs[execution_id])
 
-    def cancel(self, execution_id):
+    def container(self, value):
+        return DockerContainer(
+            self.root,
+            value["id"],
+            value["request_hash"],
+            legacy=not value.get("container_labels_version"),
+        )
+
+    def cleanup_workspace(self, value):
+        name = value.get("workspace_name")
+        if not name:
+            return True
+        if not re.fullmatch(r"bm-run-[a-z0-9_]+", name):
+            return False
+        path = self.root / name
+        if path.is_symlink():
+            return False
+        try:
+            shutil.rmtree(path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            return False
+        return True
+
+    def _stop(self, execution_id, reason):
         with self.lock:
-            self.cancelled.add(execution_id)
-            proc = self.processes.get(execution_id)
-            if proc and proc.poll() is None:
-                if self.backend == "docker":
-                    subprocess.run(
-                        ["docker", "kill", "bm-" + execution_id], capture_output=True, timeout=10, check=False
-                    )
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
             value = self.jobs.get(execution_id)
-            if value and value["lifecycle"] == "queued":
-                value.update(lifecycle="cancelled", reason="user_cancelled")
+            if not value or value["lifecycle"] not in {"queued", "running"}:
+                return
+            self.stop_reasons.setdefault(execution_id, reason)
+            proc = self.processes.get(execution_id)
+            container = self.containers.get(execution_id)
+        if proc and proc.poll() is None:
+            if container:
+                container.kill()
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+    def cancel(self, execution_id):
+        self._stop(execution_id, "user_cancelled")
+        # Retrying cancellation also retries cleanup after a daemon outage or Runner restart.
+        with self.lock:
+            value = self.jobs.get(execution_id)
+            pending = (
+                value
+                and value["lifecycle"] == "interrupted"
+                and value.get("termination", {}).get("cleanup_confirmed") is False
+            )
+            container = self.container(value) if pending and self.backend == "docker" else None
+        if container:
+            cleaned, error = container.cleanup()
+            if not self.cleanup_workspace(value):
+                cleaned, error = False, "workspace_cleanup_failed"
+            with self.lock:
+                value["termination"].update(cleanup_confirmed=cleaned, cleanup_error=error)
                 self._save(value)
 
     def _execute(self, req):
         eid = req.execution_id
         start = time.monotonic()
         work = Path(tempfile.mkdtemp(prefix="bm-run-", dir=self.root))
-        value = self.jobs[eid]
+        value = dict(self.jobs[eid])
+        termination = ExecutionTermination(state_confirmed=self.backend == "trusted-local")
+        container, proc = None, None
         try:
             with self.lock:
-                if eid in self.cancelled:
+                if eid in self.stop_reasons:
+                    value.update(lifecycle="cancelled", reason=self.stop_reasons[eid], passed=False)
                     return
                 value.update(lifecycle="running", started_at=time.time())
+                value["workspace_name"] = work.name
+                if self.backend == "docker":
+                    value["container_labels_version"] = 1
+                self.jobs[eid] = dict(value)
                 self._save(value)
             ready, message = self.ready()
             if not ready:
                 value.update(
-                    lifecycle="completed", reason="environment_blocked", message=message, exit_code=None
+                    lifecycle="completed",
+                    reason="environment_blocked",
+                    message=message,
+                    exit_code=None,
+                    passed=False,
                 )
                 return
             repo = work / "repo"
@@ -216,12 +290,17 @@ class Engine:
                 work.chmod(0o777)
                 for path in repo.rglob("*"):
                     path.chmod(0o755 if path.is_dir() else 0o644)
+                container = DockerContainer(self.root, eid, value["request_hash"])
+                with self.lock:
+                    self.containers[eid] = container
                 argv = [
                     "docker",
-                    "run",
-                    "--rm",
+                    "create",
                     "--name",
                     "bm-" + eid,
+                    *container.label_args(),
+                    "--log-driver",
+                    "none",
                     "--network",
                     "none",
                     "--read-only",
@@ -230,7 +309,9 @@ class Engine:
                     "--user",
                     "65534:65534",
                     "--memory",
-                    "1g",
+                    DOCKER_MEMORY,
+                    "--memory-swap",
+                    DOCKER_MEMORY,
                     "--cpus",
                     "1",
                     "--pids-limit",
@@ -256,11 +337,22 @@ class Engine:
                     *pytest_args,
                     "--junitxml=/output/report.xml",
                 ]
+                if not container.create(argv):
+                    termination.cli_exit_code = container.create_exit_code
+                    value.update(
+                        lifecycle="completed",
+                        reason="runtime_error",
+                        passed=False,
+                        exit_code=None,
+                        message="Docker 无法创建登记的执行容器",
+                    )
+                    return
+                argv = ["docker", "start", "--attach", container.container_id or container.name]
             logfile = work / "stdout.log"
-            with logfile.open("w+") as output:
+            with logfile.open("w+b") as output:
                 with self.lock:
-                    if eid in self.cancelled:
-                        value.update(lifecycle="cancelled", reason="user_cancelled")
+                    if eid in self.stop_reasons:
+                        value.update(lifecycle="cancelled", reason=self.stop_reasons[eid], passed=False)
                         return
                     proc = subprocess.Popen(
                         argv,
@@ -273,24 +365,44 @@ class Engine:
                     self.processes[eid] = proc
                 reason = "exited"
                 while proc.poll() is None:
-                    if time.monotonic() - start > 180 or logfile.stat().st_size > 2_000_000:
-                        reason = "timeout" if time.monotonic() - start > 180 else "output_limit"
-                        self.cancel(eid)
+                    if (
+                        time.monotonic() - start > MAX_EXECUTION_SECONDS
+                        or logfile.stat().st_size > MAX_OUTPUT_BYTES
+                    ):
+                        reason = (
+                            "timeout" if time.monotonic() - start > MAX_EXECUTION_SECONDS else "output_limit"
+                        )
+                        self._stop(eid, reason)
                         break
                     time.sleep(0.1)
                 proc.wait(timeout=10)
+                if logfile.stat().st_size > MAX_OUTPUT_BYTES:
+                    self._stop(eid, "output_limit")
                 output.seek(0)
-                text = sanitize(output.read(2_000_000))
-            if eid in self.cancelled and reason == "exited":
-                reason = "user_cancelled"
+                text = sanitize(output.read(MAX_OUTPUT_BYTES).decode("utf-8", errors="replace"))
+            state = None
+            if container:
+                _, state = container.inspect()
+            reason = classify_exit(
+                self.backend, proc.returncode, termination, state, self.stop_reasons.get(eid)
+            )
             counts = parse_junit(report)
             import importlib.metadata
 
+            limits = {
+                "wall_seconds": MAX_EXECUTION_SECONDS,
+                "output_bytes": MAX_OUTPUT_BYTES,
+                "memory": DOCKER_MEMORY if container else None,
+                "memory_swap": DOCKER_MEMORY if container else None,
+                "cpus": 1 if container else None,
+                "pids": 128 if container else None,
+            }
             environment = {
                 "backend": self.backend,
                 "image": self.image or None,
                 "python": sys.version if self.backend == "trusted-local" else None,
                 "pytest": importlib.metadata.version("pytest") if self.backend == "trusted-local" else None,
+                "limits": limits,
             }
             environment_fingerprint = hashlib.sha256(
                 json.dumps(environment, sort_keys=True).encode()
@@ -309,12 +421,13 @@ class Engine:
                 snapshot_sha256=baseline_hash,
                 tests_sha256=tests_hash,
                 patch_hash=hashlib.sha256(req.patch.encode()).hexdigest(),
-                exit_code=proc.returncode,
+                exit_code=termination.container_exit_code if container else proc.returncode,
                 counts=counts,
                 stdout=text,
                 duration_seconds=round(time.monotonic() - start, 3),
                 scope="登记 profile 内的本地验证",
                 isolation=self.backend,
+                resource_limits=limits,
                 passed=proc.returncode == 0
                 and reason == "exited"
                 and bool(
@@ -324,27 +437,55 @@ class Engine:
                     and counts["failed"] == counts["errors"] == 0
                 ),
             )
-        except Exception as exc:  # noqa: BLE001 - Persist execution failure before releasing the worker slot.
+        except Exception:  # noqa: BLE001 - Persist execution failure before releasing the worker slot.
             value.update(
                 lifecycle="completed",
                 reason="runner_error",
-                message=sanitize(str(exc)),
+                message="Runner 无法完成执行，请检查执行节点状态",
                 exit_code=None,
                 passed=False,
             )
         finally:
-            with self.lock:
-                self.processes.pop(eid, None)
-                value["finished_at"] = time.time()
-                self._save(value)
             # A test can fork children and let its parent exit; always clean the process group.
-            proc = locals().get("proc")
+            process_cleaned = True
             if proc is not None:
                 try:
                     os.killpg(proc.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
-            shutil.rmtree(work, ignore_errors=True)
+                except OSError:
+                    process_cleaned = False
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process_cleaned = False
+            if container:
+                termination.cleanup_confirmed, termination.cleanup_error = container.cleanup()
+            else:
+                termination.cleanup_confirmed = True
+            if not process_cleaned:
+                termination.cleanup_confirmed = False
+                termination.cleanup_error = "process_cleanup_failed"
+            if not self.cleanup_workspace({"workspace_name": work.name}):
+                termination.cleanup_confirmed = False
+                termination.cleanup_error = "workspace_cleanup_failed"
+            with self.lock:
+                requested = self.stop_reasons.pop(eid, None)
+                if requested:
+                    value.update(
+                        lifecycle="cancelled" if requested == "user_cancelled" else "completed",
+                        reason=requested,
+                        passed=False,
+                    )
+                termination.cause = value.get("reason", "runner_error")
+                if not termination.cleanup_confirmed:
+                    value.update(lifecycle="interrupted", reason="cleanup_unconfirmed", passed=False)
+                value["termination"] = termination.model_dump()
+                value["finished_at"] = time.time()
+                self.processes.pop(eid, None)
+                self.containers.pop(eid, None)
+                self.jobs[eid] = value
+                self._save(value)
 
 
 app = FastAPI(title="BuildMedic internal Runner")

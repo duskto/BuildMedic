@@ -51,6 +51,30 @@ export const executionSchema = z
     image_digest: z.string().nullable().optional(),
     duration_seconds: z.number().optional(),
     isolation: z.string().optional(),
+    termination: z
+      .object({
+        cause: z.string(),
+        cli_exit_code: z.number().nullable(),
+        container_exit_code: z.number().nullable(),
+        oom_killed: z.boolean().nullable(),
+        signal: z.number().nullable(),
+        possible_signal: z.number().nullable(),
+        container_status: z.string().nullable(),
+        state_confirmed: z.boolean(),
+        cleanup_confirmed: z.boolean(),
+        cleanup_error: z.string().nullable(),
+      })
+      .optional(),
+    resource_limits: z
+      .object({
+        wall_seconds: z.number(),
+        output_bytes: z.number(),
+        memory: z.string().nullable(),
+        memory_swap: z.string().nullable(),
+        cpus: z.number().nullable(),
+        pids: z.number().nullable(),
+      })
+      .optional(),
   })
   .passthrough();
 export const candidateSchema = z.object({

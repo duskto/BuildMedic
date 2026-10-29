@@ -39,6 +39,108 @@ function snapshot(lifecycle = "completed") {
   };
 }
 
+for (const fault of [
+  {
+    reason: "oom_killed",
+    text: "内存耗尽",
+    oom: true,
+    cleanup: true,
+    possible: null,
+  },
+  {
+    reason: "timeout",
+    text: "执行超时",
+    oom: false,
+    cleanup: true,
+    possible: null,
+  },
+  {
+    reason: "abnormal_exit",
+    text: "异常退出",
+    oom: false,
+    cleanup: true,
+    possible: 9,
+  },
+  {
+    reason: "cleanup_unconfirmed",
+    text: "清理尚未确认",
+    oom: false,
+    cleanup: false,
+    possible: null,
+  },
+  {
+    reason: "cleanup_unconfirmed",
+    text: "清理重试已完成，原执行已中断",
+    oom: true,
+    cleanup: true,
+    possible: null,
+  },
+]) {
+  test(`execution facts distinguish ${fault.reason} (${fault.cleanup}) and preserve cleanup status`, async ({
+    page,
+  }) => {
+    const execution = {
+      id: "resource-fixture",
+      check_id: "target",
+      reason: fault.reason,
+      lifecycle: fault.cleanup ? "completed" : "interrupted",
+      passed: false,
+      exit_code: 137,
+      command: ["python", "-m", "pytest"],
+      termination: {
+        cause: fault.reason,
+        cli_exit_code: 137,
+        container_exit_code: 137,
+        oom_killed: fault.oom,
+        signal: fault.oom ? 9 : null,
+        possible_signal: fault.possible,
+        container_status: "exited",
+        state_confirmed: true,
+        cleanup_confirmed: fault.cleanup,
+        cleanup_error: fault.cleanup ? null : "docker_unavailable",
+      },
+      resource_limits: {
+        wall_seconds: 180,
+        output_bytes: 2000000,
+        memory: "1g",
+        memory_swap: "1g",
+        cpus: 1,
+        pids: 128,
+      },
+    };
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.route("**/api/v1/tasks/fixture-task", (route) =>
+      route.fulfill({
+        json: {
+          data: { ...snapshot(), executions: [execution] },
+          request_id: "fixture",
+        },
+      }),
+    );
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/tasks/fixture-task?tab=evidence");
+    await expect(page.getByText(fault.text, { exact: true })).toBeVisible();
+    await expect(page.getByText(/内存上限 1g/)).toBeVisible();
+    if (fault.possible)
+      await expect(
+        page.getByText(/退出码可能对应信号 9，未确认/),
+      ).toBeVisible();
+    if (fault.cleanup)
+      await expect(page.getByText("执行资源已清理")).toBeVisible();
+    else
+      await expect(page.getByRole("alert")).toContainText("不能认定验证完成");
+    if (fault.oom && fault.reason !== "oom_killed")
+      await expect(page.getByText(/原始故障：内存耗尽/)).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
+    ).toBe(false);
+    expect(errors).toEqual([]);
+  });
+}
+
 test("temporary polling failure preserves the task and recovers from the authoritative snapshot", async ({
   page,
 }) => {

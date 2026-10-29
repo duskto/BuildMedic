@@ -65,4 +65,4 @@ GitHub 元数据与日志支持有次数 / 等待上限的重试，日志下载�
 
 日常测试使用明确标注的 GitHub HTTP fixture。容器集成以真实归档中的失败源码运行标准与自适应修复及重新验证；测试模型是脚本替身，不宣称真实远端 CI 成功。另已实际下载 `duskto/BuildMedic` 的公开固定提交 `e8b153c4761513001a9fe28634a62535af5c806c`，通过归档解析和完整性清单生成；没有运行该远程仓库代码。
 
-尚未收到用于验收的真实失败 Run URL，也没有发布新仓库或工作流。真实 Run、日志、登记镜像与模型组合的端到端验收仍待执行，因此不把本轮开发标为整个 P1 已完成。
+已在独立验收分支生成真实失败 [Run 40837098943](https://github.com/duskto/BuildMedic/actions/runs/40837098943)，并完成网页、真实 GitHub API、DeepSeek、原生 Harness² 和独立 Docker 验收。任务 `31c3aff1d1f14c15b1008e7e8d219658` 固定原 SHA，4 个 rollout 完成，最终目标 / 回归均 8/8；重新验证也通过且未新增模型调用。验收操作将实际选中补丁应用到该分支后，GitHub [Run 40842086320](https://github.com/duskto/BuildMedic/actions/runs/40842086320) 为 8 passed。该案例明确带已知缺陷，只证明登记范围的 P1 核心闭环，不是任意仓库或策略收益验收。完整绑定、首轮预算失败、费用口径及续跑方法见 [真实 GitHub 验收](github-acceptance.md)。

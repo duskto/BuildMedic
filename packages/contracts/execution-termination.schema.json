@@ -1,0 +1,106 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "cause": {
+      "default": "runner_error",
+      "title": "Cause",
+      "type": "string"
+    },
+    "cli_exit_code": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cli Exit Code"
+    },
+    "container_exit_code": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Container Exit Code"
+    },
+    "oom_killed": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Oom Killed"
+    },
+    "signal": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Signal"
+    },
+    "possible_signal": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Possible Signal"
+    },
+    "container_status": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Container Status"
+    },
+    "state_confirmed": {
+      "default": false,
+      "title": "State Confirmed",
+      "type": "boolean"
+    },
+    "cleanup_confirmed": {
+      "default": false,
+      "title": "Cleanup Confirmed",
+      "type": "boolean"
+    },
+    "cleanup_error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cleanup Error"
+    }
+  },
+  "title": "ExecutionTermination",
+  "type": "object"
+}

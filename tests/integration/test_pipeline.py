@@ -389,3 +389,91 @@ def test_zero_tests_or_extra_skips_fail_verification():
     assert verification_ok([old, old], new, new)[0] is False
     new["counts"] = {"collected": 1, "skipped": 1, "tests": [{"id": "test_original", "status": "skipped"}]}
     assert verification_ok([old, old], new, new)[0] is False
+
+
+@pytest.mark.parametrize(
+    "cause,cleanup,recover",
+    [
+        ("oom_killed", True, False),
+        ("timeout", True, False),
+        ("cleanup_unconfirmed", False, False),
+        ("cleanup_unconfirmed", False, True),
+    ],
+)
+def test_runner_resource_failure_keeps_facts_and_never_calls_model(
+    local_engine, monkeypatch, cause, cleanup, recover
+):
+    configured_model(monkeypatch)
+    tid, claimed = task()
+
+    class ResourceRunner(InProcessRunner):
+        recovered = False
+
+        async def get(self, eid):
+            result = await super().get(eid)
+            if result["lifecycle"] == "completed":
+                result.update(
+                    reason=cause,
+                    passed=False,
+                    lifecycle="completed" if cleanup else "interrupted",
+                    termination={
+                        **result["termination"],
+                        "cause": cause,
+                        "oom_killed": cause == "oom_killed",
+                        "cleanup_confirmed": cleanup or self.recovered,
+                    },
+                )
+            return result
+
+        async def cancel(self, eid):
+            self.recovered = recover
+            return cleanup or recover
+
+    class NeverCalled(TestProvider):
+        async def complete(self, messages):
+            raise AssertionError("Resource failure is not a diagnosis or repair signal")
+
+    run(run_claimed(tid, claimed, runner=ResourceRunner(), model=NeverCalled()))
+    snap = store.snapshot(tid)
+    assert snap["lifecycle"] == ("completed" if cleanup or recover else "interrupted")
+    if cleanup or recover:
+        assert snap["outcome"] == "blocked"
+    assert snap["usage"]["calls"] == 0 and snap["candidates"] == []
+    execution = snap["executions"][0]
+    assert execution["reason"] == cause and execution["termination"]["cleanup_confirmed"] is (
+        cleanup or recover
+    )
+    assert store.get_artifact(tid, execution["stdout_artifact_id"])["content"]
+
+
+def test_cancellation_during_check_archives_final_runner_cleanup(local_engine, monkeypatch, tmp_path):
+    import shutil
+    import time
+
+    from buildmedic.cases import case_dir
+
+    source = tmp_path / "synthetic-source"
+    shutil.copytree(case_dir("pagination"), source)
+    (source / "tests/test_pagination.py").write_text("import time\ndef test_wait():\n    time.sleep(60)\n")
+    monkeypatch.setattr(runner_module, "case_dir", lambda _: source)
+    configured_model(monkeypatch)
+    tid, claimed = task()
+
+    async def flow():
+        running = asyncio.create_task(
+            run_claimed(tid, claimed, runner=InProcessRunner(), model=TestProvider())
+        )
+        deadline = time.monotonic() + 5
+        while not local_engine.processes and time.monotonic() < deadline:
+            await asyncio.sleep(0.02)
+        assert local_engine.processes
+        store.cancel(tid, "test-owner")
+        await asyncio.wait_for(running, timeout=10)
+
+    run(flow())
+    snap = store.snapshot(tid)
+    assert snap["lifecycle"] == "cancelled" and snap["usage"]["calls"] == 0
+    execution = snap["executions"][0]
+    assert execution["reason"] == "user_cancelled"
+    assert execution["termination"]["cleanup_confirmed"] is True
+    assert store.get_artifact(tid, execution["stdout_artifact_id"])["kind"] == "test_log"

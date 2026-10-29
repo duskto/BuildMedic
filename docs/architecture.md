@@ -25,7 +25,7 @@ API 在创建事务中同时写入 task、初始事件和 outbox；Worker 通过
 
 Docker 测试容器非 root、只读系统和源码挂载、独立可写产物目录、断网、禁用 capabilities/提权，并限制 CPU、内存、PID、文件大小及时间。Docker socket 仅属于 Runner 所在的高权限执行边界。产物目录不包含源码，避免可写挂载绕过源码只读限制。
 
-Runner 支持本地演示案例，以及服务器明确登记仓库、SHA、workflow、Job 与镜像的远程快照。后者只能使用 Docker；可信本机模式仅供受信任的本地案例。接收陌生仓库、公开部署、磁盘配额、容器 OOM 精确分类、保留期与强隔离仍需要单独设计和部署验收。
+Runner 支持本地演示案例，以及服务器明确登记仓库、SHA、workflow、Job 与镜像的远程快照。后者只能使用 Docker；可信本机模式仅供受信任的本地案例。容器 OOM、异常退出、超时和清理确认已分别记录，见 [Runner 故障处理](runner-failures.md)。接收陌生仓库、公开部署、磁盘配额、保留期与强隔离仍需要单独设计和部署验收。
 
 远程归档由 Runner 通过受限公开地址下载和校验，Worker 只获得清单、workflow 和受限源码文本；后者仅用于材料与补丁校验，不在 Worker 执行。每次 Runner 检查重读缓存指纹并创建独立副本，任务归档完整 profile 和清单，配置变化或证据不匹配会阻止模型调用或 repaired 结论。详见[远程接入](remote.md)。
 

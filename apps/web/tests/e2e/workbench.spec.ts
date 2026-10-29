@@ -334,6 +334,7 @@ test("only a registered remote Job enables adaptive repair and pins its attempt"
   await expect(
     page.getByRole("checkbox", { name: /使用同域经验/ }),
   ).toHaveCount(0);
+  await expect(page.getByLabel("Token 上限")).toHaveValue("150000");
   await page.getByRole("button", { name: "开始诊断" }).click();
   await expect(page.getByRole("alert")).toContainText("已记录远程任务输入");
   expect(captured.source).toEqual({
@@ -344,9 +345,11 @@ test("only a registered remote Job enables adaptive repair and pins its attempt"
   });
   expect(captured.mode).toBe("adaptive");
   expect(captured.experience).toBe(false);
+  expect(captured.limits.max_tokens).toBe(150000);
   await page.getByRole("radio", { name: /lint.*仅日志诊断/ }).check();
   await expect(mode).toBeDisabled();
   await expect(page.getByRole("radio", { name: /标准诊断/ })).toBeChecked();
+  await expect(page.getByLabel("Token 上限")).toHaveValue("100000");
 });
 
 test("agent tools are explicit and budgets reset when the mode changes", async ({

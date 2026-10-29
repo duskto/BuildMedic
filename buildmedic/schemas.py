@@ -49,8 +49,11 @@ class CreateTask(StrictModel):
             raise ValueError("经验库仅支持自适应演示任务")
         if not self.agent_tools and self.limits.max_model_calls > 12:
             raise ValueError("超过 12 次的调用预算仅用于主动开启工具诊断的任务")
-        if not self.agent_tools and self.limits.max_tokens > (150000 if self.experience else 100000):
-            raise ValueError("超过 100,000 Token 的预算仅用于主动开启经验反思的任务")
+        extended_context = self.experience or (
+            self.source.type == "github_actions" and self.mode == "adaptive"
+        )
+        if not self.agent_tools and self.limits.max_tokens > (150000 if extended_context else 100000):
+            raise ValueError("Token 预算超过当前模式上限；150,000 仅用于经验反思或登记远程自适应任务")
         return self
 
 

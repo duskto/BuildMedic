@@ -80,7 +80,7 @@ class RunnerClient:
         for _ in range(30):
             result = await self.get(execution_id)
             if result["lifecycle"] in {"completed", "cancelled", "interrupted"}:
-                return True
+                return result.get("termination", {}).get("cleanup_confirmed") is not False
             await asyncio.sleep(0.1)
         return False
 

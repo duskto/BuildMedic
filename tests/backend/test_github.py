@@ -227,3 +227,77 @@ def test_registered_job_preview_and_creation_pin_server_profile(registered_remot
     rejected = client.post("/api/v1/tasks", json=body, headers={"Idempotency-Key": "unregistered-fork"})
     assert rejected.status_code == 422
     assert rejected.json()["error"]["code"] == "adaptive_source_unsupported"
+
+
+def test_remote_adaptive_context_budget_is_explicit_and_does_not_change_retry(
+    registered_remote, client, monkeypatch
+):
+    from buildmedic import store
+
+    p, _ = registered_remote
+
+    class GitHub:
+        async def preview(self, *_):
+            return {
+                "repo": p.repository,
+                "run_id": 42,
+                "run_attempt": 2,
+                "head_sha": p.head_sha,
+                "head_repository": p.repository,
+                "workflow_path": p.workflow_path,
+                "profile_version": None,
+                "execution_supported": True,
+                "jobs": [
+                    {
+                        "id": 17,
+                        "name": p.job_name,
+                        "conclusion": "failure",
+                        "execution_supported": True,
+                        "profile_version": p.id,
+                        "failed_steps": [],
+                    }
+                ],
+            }
+
+        async def close(self):
+            pass
+
+    monkeypatch.setattr("buildmedic.api.GitHubClient", GitHub)
+    monkeypatch.setattr("buildmedic.api.capability", lambda: {"ready": True, "message": "test"})
+    body = {
+        "source": {
+            "type": "github_actions",
+            "run_url": f"https://github.com/{p.repository}/actions/runs/42?attempt=2",
+            "run_attempt": 2,
+            "job_id": 17,
+        },
+        "mode": "adaptive",
+        "limits": {"max_model_calls": 12, "max_tokens": 100000},
+    }
+    old = client.post("/api/v1/tasks", json=body, headers={"Idempotency-Key": "original-remote-budget"})
+    assert old.status_code == 202, old.text
+    old_id = old.json()["data"]["task_id"]
+    assert client.post(f"/api/v1/tasks/{old_id}/cancel").status_code == 200
+    body["limits"]["max_tokens"] = 150000
+    created = client.post("/api/v1/tasks", json=body, headers={"Idempotency-Key": "extended-remote-budget"})
+    assert created.status_code == 202, created.text
+    assert store.snapshot(created.json()["data"]["task_id"])["limits"]["max_tokens"] == 150000
+    retried = client.post(
+        f"/api/v1/tasks/{old_id}/retry", headers={"Idempotency-Key": "retry-frozen-remote-budget"}
+    )
+    assert retried.status_code == 202, retried.text
+    assert store.snapshot(retried.json()["data"]["task_id"])["limits"]["max_tokens"] == 100000
+    assert store.snapshot(old_id)["limits"]["max_tokens"] == 100000
+    body["limits"]["max_tokens"] = 150001
+    assert (
+        client.post("/api/v1/tasks", json=body, headers={"Idempotency-Key": "over-remote-budget"}).status_code
+        == 422
+    )
+    body["limits"]["max_tokens"] = 150000
+    body["mode"] = "standard"
+    assert (
+        client.post(
+            "/api/v1/tasks", json=body, headers={"Idempotency-Key": "standard-remote-budget"}
+        ).status_code
+        == 422
+    )

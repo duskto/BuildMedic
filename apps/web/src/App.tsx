@@ -607,6 +607,8 @@ function NewTask() {
   const selectedJob = preview.data?.jobs.find((job) => job.id === jobId);
   const registeredSource =
     source === "demo" || selectedJob?.execution_supported === true;
+  const remoteAdaptive =
+    source === "github" && mode === "adaptive" && registeredSource;
   const create = useMutation({
     mutationFn: () =>
       api("/tasks", z.object({ task_id: z.string() }), {
@@ -846,7 +848,9 @@ function NewTask() {
                 onClick={() => {
                   setMode("adaptive");
                   setMaxCalls(agentTools ? 24 : 12);
-                  setMaxTokens(agentTools ? 250000 : 100000);
+                  setMaxTokens(
+                    agentTools ? 250000 : source === "github" ? 150000 : 100000,
+                  );
                   changed();
                 }}
               >
@@ -904,6 +908,8 @@ function NewTask() {
                 已启用 Harness² k=1
                 顺序优化，全部调用共享预算。支持登记的案例和固定提交
                 Job；不会自动发布跨任务经验。
+                {remoteAdaptive &&
+                  "远程任务默认 150,000 Token，可手动降低，全部调用仍共用所选上限。"}
               </div>
             )}
             {!health.data?.adaptive_ready && (
@@ -931,7 +937,7 @@ function NewTask() {
                       ? mode === "adaptive"
                         ? 250000
                         : 150000
-                      : experience
+                      : experience || remoteAdaptive
                         ? 150000
                         : mode === "adaptive"
                           ? 100000
@@ -1007,9 +1013,15 @@ function NewTask() {
                   </option>
                   <option value={48000}>48,000</option>
                   <option value={100000}>100,000</option>
-                  {(experience || agentTools) && (
+                  {(experience || agentTools || remoteAdaptive) && (
                     <option value={150000}>
-                      150,000（{agentTools ? "含工具交互" : "含经验反思"}）
+                      150,000（
+                      {agentTools
+                        ? "含工具交互"
+                        : remoteAdaptive
+                          ? "远程自适应"
+                          : "含经验反思"}
+                      ）
                     </option>
                   )}
                   {agentTools && (
@@ -1875,6 +1887,59 @@ function EvidenceCard({
     </article>
   );
 }
+const executionReasons: Record<string, string> = {
+  exited: "正常退出",
+  oom_killed: "内存耗尽",
+  timeout: "执行超时",
+  output_limit: "日志超过上限",
+  signal: "被信号终止",
+  abnormal_exit: "异常退出",
+  user_cancelled: "用户取消",
+  runtime_error: "容器执行失败",
+  container_state_unavailable: "容器状态无法确认",
+  cleanup_unconfirmed: "清理尚未确认",
+  environment_blocked: "执行环境不可用",
+  runner_error: "Runner 执行异常",
+  runner_restarted: "Runner 重启中断",
+};
+function ExecutionFacts({ execution: e }: { execution: Execution }) {
+  const facts = e.termination;
+  return (
+    <div className="small-note">
+      <span>
+        {e.reason === "cleanup_unconfirmed" && facts?.cleanup_confirmed
+          ? "清理重试已完成，原执行已中断"
+          : e.reason === "exited"
+            ? e.passed
+              ? "测试通过"
+              : "测试未通过"
+            : (executionReasons[e.reason ?? ""] ?? e.reason ?? "等待执行")}
+      </span>
+      {facts?.oom_killed && e.reason !== "oom_killed" && (
+        <span> · 原始故障：内存耗尽</span>
+      )}
+      {facts?.signal != null && <span> · 终止信号 {facts.signal}</span>}
+      {facts?.possible_signal != null && (
+        <span> · 退出码可能对应信号 {facts.possible_signal}，未确认</span>
+      )}
+      {e.resource_limits && (
+        <span>
+          {" "}
+          · 时限 {e.resource_limits.wall_seconds}s
+          {e.resource_limits.memory
+            ? ` · 内存上限 ${e.resource_limits.memory}`
+            : ""}
+        </span>
+      )}
+      {facts?.cleanup_confirmed && <span> · 执行资源已清理</span>}
+      {facts && !facts.cleanup_confirmed && (
+        <p className="notice danger" role="alert">
+          执行资源清理尚未确认，不能认定验证完成。
+        </p>
+      )}
+    </div>
+  );
+}
 function ExecutionLog({
   execution: e,
   taskId,
@@ -1894,6 +1959,7 @@ function ExecutionLog({
         <span>exit {e.exit_code ?? "—"}</span>
         <ChevronRight size={15} />
       </button>
+      <ExecutionFacts execution={e} />
       {open && (
         <>
           <code className="command">{e.command?.join(" ") ?? "执行中"}</code>
@@ -2083,9 +2149,9 @@ function CheckSummary({
             <p>未取得测试收集记录</p>
           )}
           <small>
-            exit {result.exit_code ?? "—"} · {result.reason ?? "等待执行"} ·{" "}
-            {result.duration_seconds ?? "—"}s
+            exit {result.exit_code ?? "—"} · {result.duration_seconds ?? "—"}s
           </small>
+          <ExecutionFacts execution={result} />
         </>
       )}
     </div>
