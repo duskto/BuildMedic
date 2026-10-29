@@ -1,0 +1,157 @@
+{
+  "$defs": {
+    "ReviewEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 80,
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 40,
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "line_start": {
+          "minimum": 0,
+          "title": "Line Start",
+          "type": "integer"
+        },
+        "line_end": {
+          "minimum": 0,
+          "title": "Line End",
+          "type": "integer"
+        },
+        "excerpt": {
+          "maxLength": 600,
+          "title": "Excerpt",
+          "type": "string"
+        },
+        "excerpt_truncated": {
+          "title": "Excerpt Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "line_start",
+        "line_end",
+        "excerpt",
+        "excerpt_truncated"
+      ],
+      "title": "ReviewEvidence",
+      "type": "object"
+    },
+    "ReviewItem": {
+      "additionalProperties": false,
+      "properties": {
+        "review_id": {
+          "pattern": "^[a-f0-9]{32}$",
+          "title": "Review Id",
+          "type": "string"
+        },
+        "case_id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        },
+        "assessment_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Assessment Sha256",
+          "type": "string"
+        },
+        "diagnosis": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Diagnosis"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/ReviewEvidence"
+          },
+          "maxItems": 30,
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "review_id",
+        "case_id",
+        "snapshot_sha256",
+        "assessment_sha256",
+        "diagnosis",
+        "evidence"
+      ],
+      "title": "ReviewItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "protocol": {
+      "const": "blinded-diagnosis-v1",
+      "default": "blinded-diagnosis-v1",
+      "title": "Protocol",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-f0-9]{32}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "report_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Report Sha256",
+      "type": "string"
+    },
+    "rubric_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Rubric Sha256",
+      "type": "string"
+    },
+    "rows": {
+      "items": {
+        "$ref": "#/$defs/ReviewItem"
+      },
+      "maxItems": 36,
+      "minItems": 1,
+      "title": "Rows",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "report_sha256",
+    "rubric_sha256",
+    "rows"
+  ],
+  "title": "ReviewRequest",
+  "type": "object"
+}

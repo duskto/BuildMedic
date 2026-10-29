@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "purpose": "public-development",
+  "cases": [
+    {
+      "case_id": "pagination",
+      "repository_group": "buildmedic-demo",
+      "template_group": "pagination",
+      "split": "development",
+      "snapshot_sha256": "33ebbbb192dbde79de07123ab57237ca672cd5fe4146d7b2731a6f6e571e949e",
+      "log_sha256": "b6bafcf94388a65fc5fdbd322c199a7e3221a48c7a288ce5f04d93e435326385"
+    },
+    {
+      "case_id": "imports",
+      "repository_group": "buildmedic-demo",
+      "template_group": "imports",
+      "split": "development",
+      "snapshot_sha256": "234321f8ea43b6d11b17edf45cf0d89d445fe4123b8f90bb6fdd5082095f0dad",
+      "log_sha256": "c50861523d999e7de9ce0811415ad975ee88a714f16c97e45e30e64f1bad77c6"
+    },
+    {
+      "case_id": "signature",
+      "repository_group": "buildmedic-demo",
+      "template_group": "signature",
+      "split": "development",
+      "snapshot_sha256": "fb0c60c56130f08406b887ac7a380f6b266106802c9b1e7663af5a98dd81b618",
+      "log_sha256": "47084c17a492408f5782fe3fd583eb3ab43649b4c67cdc8d5417521397c49170"
+    }
+  ]
+}

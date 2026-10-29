@@ -125,7 +125,7 @@ npm run test:e2e
 
 后端日常测试中的模型是明确标注的测试替身，目标检查、回归和独立验证启动真实 pytest 子进程。另有显式运行的 `npm run test:live`，通过浏览器连接真实服务与模型，会产生模型用量；执行方式和结果见 [验证记录](docs/verification.md)。
 
-当前已验证：308 项日常后端检查、额外 20 项容器环境检查、31 项 fixture 浏览器检查，以及真实远程 Run 的网页 / 模型 / Docker 闭环和 TypeScript/Vite 生产构建。四组真实验收中日志组交付 3 份未评分诊断、未执行代码；三个修复组均 3/3 通过公开检查，单次固定策略消耗 9,980 Token，独立多次消耗 40,445 Token，Harness² 消耗 154,047 Token，尚未显示公开通过数收益。另用工作区外的私有行为包评分，9 个选中补丁均通过。真实远程验收成功一轮为 7 次调用 / 65,432 Token，连同首轮预算失败合计 13 次 / 118,395 Token；后续重新验证未新增模型调用。经验库默认关闭；PostgreSQL/Redis 故障验收、诊断准确率与分组隔离测试集评测仍待完成。
+当前已验证：339 项日常后端检查、额外 20 项容器环境检查、31 项 fixture 浏览器检查，以及真实远程 Run 的网页 / 模型 / Docker 闭环和 TypeScript/Vite 生产构建。四组真实验收中日志组交付 3 份未评分诊断、未执行代码；三个修复组均 3/3 通过公开检查，单次固定策略消耗 9,980 Token，独立多次消耗 40,445 Token，Harness² 消耗 154,047 Token，尚未显示公开通过数收益。另用工作区外的私有行为包评分，9 个选中补丁均通过。真实远程验收成功一轮为 7 次调用 / 65,432 Token，连同首轮预算失败合计 13 次 / 118,395 Token；后续重新验证未新增模型调用。独立人工诊断审核流程与分组清单预检已接通，真实诊断准确率与分组隔离测试集评测仍待完成。经验库默认关闭；PostgreSQL/Redis 故障验收仍待完成。
 
 ## 工程入口
 
@@ -139,6 +139,8 @@ npm run test:e2e
 - `buildmedic/logs.py`：失败窗口、模型片段选择及有界日志分页。
 - `buildmedic/ci_logs.py`：固定 Job 的会话内脱敏日志缓存、完整性与容量管理。
 - `buildmedic/scoring.py`、`scorer_service/`：独立评分桥、外部断言协调和有界容器观测。
+- `buildmedic/diagnosis_scoring.py`：冻结诊断、离线人工审核与签名回执，见[操作指南](docs/diagnosis-review.md)。
+- `buildmedic/evaluation_dataset.py`：仓库与缺陷模板分组、数据划分和指纹预检。
 - `buildmedic/experiences.py`：同域经验版本、冻结输入和带证据的发布。
 - `buildmedic/profiles.py`、`buildmedic/snapshots.py`：登记配置、受限归档与固定提交缓存。
 - `buildmedic/worker.py`：outbox、Celery 与失效租约回收。

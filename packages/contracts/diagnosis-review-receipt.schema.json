@@ -1,0 +1,114 @@
+{
+  "$defs": {
+    "Verdict": {
+      "additionalProperties": false,
+      "properties": {
+        "review_id": {
+          "pattern": "^[a-f0-9]{32}$",
+          "title": "Review Id",
+          "type": "string"
+        },
+        "assessment_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Assessment Sha256",
+          "type": "string"
+        },
+        "root_cause_correct": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Root Cause Correct"
+        },
+        "location_correct": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Location Correct"
+        }
+      },
+      "required": [
+        "review_id",
+        "assessment_sha256",
+        "root_cause_correct",
+        "location_correct"
+      ],
+      "title": "Verdict",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "protocol": {
+      "const": "blinded-diagnosis-v1",
+      "title": "Protocol",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-f0-9]{32}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "report_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Report Sha256",
+      "type": "string"
+    },
+    "rubric_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Rubric Sha256",
+      "type": "string"
+    },
+    "request_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Request Sha256",
+      "type": "string"
+    },
+    "reviewer_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Reviewer Sha256",
+      "type": "string"
+    },
+    "sealed_at": {
+      "exclusiveMinimum": 0,
+      "title": "Sealed At",
+      "type": "number"
+    },
+    "rows": {
+      "items": {
+        "$ref": "#/$defs/Verdict"
+      },
+      "maxItems": 36,
+      "minItems": 1,
+      "title": "Rows",
+      "type": "array"
+    },
+    "signature": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Signature",
+      "type": "string"
+    }
+  },
+  "required": [
+    "protocol",
+    "id",
+    "report_sha256",
+    "rubric_sha256",
+    "request_sha256",
+    "reviewer_sha256",
+    "sealed_at",
+    "rows",
+    "signature"
+  ],
+  "title": "ReviewReceipt",
+  "type": "object"
+}

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { api } from "./api";
 import { healthSchema } from "./contracts";
 import { IndependentScore } from "./IndependentScore";
+import { DiagnosisScore } from "./DiagnosisScore";
 import { EvaluationAnalysis } from "./EvaluationAnalysis";
 
 const summarySchema = z.object({
@@ -573,6 +574,13 @@ export function ExperimentDetail() {
         complete={item.status === "completed"}
         protocol={item.manifest.schema_version}
       />
+      {item.manifest.schema_version === "2.0" && (
+        <DiagnosisScore
+          id={item.id}
+          complete={item.status === "completed"}
+          reportHash={item.report_sha256}
+        />
+      )}
     </>
   );
 }

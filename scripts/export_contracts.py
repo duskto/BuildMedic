@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 
 from buildmedic.api import app
+from buildmedic.diagnosis_protocol import ReviewReceipt, ReviewRequest
 from buildmedic.evaluation import SPEC_ADAPTER
 from buildmedic.evaluation_analysis import EvaluationAnalysis
+from buildmedic.evaluation_dataset import DatasetManifest
 from buildmedic.logs import LogIndex, LogWindow
 from buildmedic.runner_runtime import ExecutionTermination
 from buildmedic.schemas import CreateTask, Diagnosis, ExecutionRequest, TaskEvent, TaskSnapshot
@@ -27,6 +29,9 @@ for name, schema in {
     "log-window": LogWindow.model_json_schema(),
     "score-request": ScoreRequest.model_json_schema(),
     "score-receipt": ScoreReceipt.model_json_schema(),
+    "dataset-manifest": DatasetManifest.model_json_schema(),
+    "diagnosis-review-request": ReviewRequest.model_json_schema(),
+    "diagnosis-review-receipt": ReviewReceipt.model_json_schema(),
 }.items():
     (root / (name + ".schema.json")).write_text(json.dumps(schema, ensure_ascii=False, indent=2) + "\n")
 print("Exported contracts to", root)

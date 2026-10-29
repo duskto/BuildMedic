@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "DatasetCase": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "repository_group": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Repository Group",
+          "type": "string"
+        },
+        "template_group": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Template Group",
+          "type": "string"
+        },
+        "split": {
+          "enum": [
+            "development",
+            "test"
+          ],
+          "title": "Split",
+          "type": "string"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        },
+        "log_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Log Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id",
+        "repository_group",
+        "template_group",
+        "split",
+        "snapshot_sha256",
+        "log_sha256"
+      ],
+      "title": "DatasetCase",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "purpose": {
+      "enum": [
+        "public-development",
+        "grouped-benchmark"
+      ],
+      "title": "Purpose",
+      "type": "string"
+    },
+    "cases": {
+      "items": {
+        "$ref": "#/$defs/DatasetCase"
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Cases",
+      "type": "array"
+    }
+  },
+  "required": [
+    "purpose",
+    "cases"
+  ],
+  "title": "DatasetManifest",
+  "type": "object"
+}

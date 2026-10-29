@@ -23,6 +23,8 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "scorer_url", "")
     monkeypatch.setattr(cfg, "scorer_token", "")
     monkeypatch.setattr(cfg, "scorer_suite_sha256", "")
+    monkeypatch.setattr(cfg, "diagnosis_review_key", "")
+    monkeypatch.setattr(cfg, "diagnosis_rubric_sha256", "")
     monkeypatch.setattr(cfg, "runner_token", "test-internal-runner-token")
     engine = db.make_engine("sqlite:///" + str(tmp_path / "test.db"))
     monkeypatch.setattr(db, "engine", engine)

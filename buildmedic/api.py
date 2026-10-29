@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import db, evaluation, evaluation_analysis, experiences, scoring, store
+from . import db, diagnosis_scoring, evaluation, evaluation_analysis, experiences, scoring, store
 from .cases import CASES, metadata
 from .clients import ModelClient, RunnerClient
 from .config import settings
@@ -399,6 +399,26 @@ async def experiment_score_report(eid: str, request: Request):
         media_type="application/json",
         headers={
             "Content-Disposition": f'attachment; filename="score-{result["id"]}.json"',
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
+@app.get("/api/v1/experiments/{eid}/diagnosis-score")
+def experiment_diagnosis_score(eid: str, request: Request):
+    return envelope(request, diagnosis_scoring.get(eid, request.state.owner))
+
+
+@app.get("/api/v1/experiments/{eid}/diagnosis-score/report")
+def experiment_diagnosis_score_report(eid: str, request: Request):
+    result = diagnosis_scoring.get(eid, request.state.owner)
+    if result is None:
+        raise KeyError(eid)
+    return Response(
+        json.dumps(result, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="diagnosis-{result["id"]}.json"',
             "Cache-Control": "private, no-store",
         },
     )

@@ -4,6 +4,7 @@ test("private behavior failures are separate from public results and scoring cre
   page,
 }) => {
   let started = 0;
+  let diagnosis: unknown = null;
   const summary = {
     mode: "standard",
     planned: 1,
@@ -122,7 +123,8 @@ test("private behavior failures are separate from public results and scoring cre
         expect(route.request().postData()).toBeNull();
         data = score;
       } else data = null;
-    } else if (path.endsWith("/analysis"))
+    } else if (path.endsWith("/diagnosis-score")) data = diagnosis;
+    else if (path.endsWith("/analysis"))
       data = {
         source_report_sha256: experiment.report_sha256,
         complete: true,
@@ -163,6 +165,73 @@ test("private behavior failures are separate from public results and scoring cre
     "/api/v1/experiments/owned-experiment/score/report",
   );
   expect(started).toBe(1);
+  const reviewSummary = {
+    mode: "standard",
+    planned: 1,
+    delivered: 1,
+    missing: 0,
+    reviewed: 0,
+    unreviewed: 1,
+    root_cause_correct: 0,
+    location_correct: 0,
+    both_correct: 0,
+    diagnosis_accuracy: null as number | null,
+  };
+  const review = {
+    id: "review-fixture",
+    status: "awaiting_review",
+    report_sha256: experiment.report_sha256,
+    rubric_sha256: "a".repeat(64),
+    scope: "synthetic independent human review",
+    summary: [reviewSummary],
+  };
+  diagnosis = review;
+  await page.getByRole("button", { name: "刷新审核结果" }).click();
+  await expect(
+    page.getByText("等待独立人工审核；准确率未评分", { exact: true }),
+  ).toBeVisible();
+  const panel = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "独立诊断审核", exact: true }),
+  });
+  await expect(
+    panel.getByRole("cell", { name: "未评分", exact: true }),
+  ).toHaveCount(3);
+  diagnosis = {
+    ...review,
+    status: "completed",
+    summary: [
+      {
+        ...reviewSummary,
+        reviewed: 1,
+        unreviewed: 0,
+        root_cause_correct: 1,
+        diagnosis_accuracy: 0,
+      },
+    ],
+  };
+  await page.getByRole("button", { name: "刷新审核结果" }).click();
+  await expect(
+    panel.getByText("人工审核已封存", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    panel.getByRole("cell", { name: "0.0%（0 / 1）", exact: true }),
+  ).toBeVisible();
+  await expect(
+    panel.getByRole("link", { name: "下载诊断审核回执" }),
+  ).toHaveAttribute(
+    "href",
+    "/api/v1/experiments/owned-experiment/diagnosis-score/report",
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  diagnosis = { ...review, status: "completed", report_sha256: "0".repeat(64) };
+  await page.getByRole("button", { name: "刷新审核结果" }).click();
+  await expect(panel.getByRole("alert")).toContainText("报告指纹不一致");
+  await expect(panel.getByRole("table")).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(

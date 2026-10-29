@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     scorer_url: str = ""
     scorer_token: str = ""
     scorer_suite_sha256: str = ""
+    diagnosis_review_key: str = ""
+    diagnosis_rubric_sha256: str = ""
     runner_profiles: Path | None = None
     adaptive_enabled: bool = False
     cookie_secure: bool = False

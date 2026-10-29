@@ -34,6 +34,8 @@ API 根路径为 `/api/v1`。成功返回 `{data, request_id}`，错误返回 `{
 | GET | `/tasks/{id}/artifacts/{aid}/lines` | 按行及字符列游标读取当前任务脱敏日志；最多 200 行 / 16 KB 源文本 |
 | POST / GET | `/experiments/{id}/score` | 启动 / 查询整批完成后的独立评分，不接收请求体 |
 | GET | `/experiments/{id}/score/report` | 下载经服务端验证的评分回执，检查会话归属 |
+| GET | `/experiments/{id}/diagnosis-score` | 当前会话的独立人工诊断审核；未登记返回 null |
+| GET | `/experiments/{id}/diagnosis-score/report` | 下载审核汇总与签名回执，不含私有参考答案或备注 |
 
 创建本地任务：
 
