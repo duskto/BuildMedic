@@ -30,15 +30,14 @@ const summarySchema = z.object({
   diagnoses: z.number().optional(),
   diagnosis_accuracy: z.number().nullable().optional(),
 });
-export const experimentSchema = z.object({
-  id: z.string(),
-  created_at: z.number(),
-  status: z.enum(["planned", "running", "completed", "cancelled"]),
-  manifest: z.object({
+const manifestSchema = z
+  .object({
     schema_version: z.string().optional(),
     multi_attempts: z.number().optional(),
     name: z.string(),
-    dataset: z.literal("public-development"),
+    dataset: z.enum(["public-development", "public-constructed-grouped"]),
+    partition: z.enum(["development", "test"]).optional(),
+    dataset_sha256: z.string().optional(),
     repeats: z.number(),
     cases: z.array(
       z.object({
@@ -53,7 +52,13 @@ export const experimentSchema = z.object({
       max_tokens: z.number(),
       max_wall_seconds: z.number(),
     }),
-  }),
+  })
+  .passthrough();
+export const experimentSchema = z.object({
+  id: z.string(),
+  created_at: z.number(),
+  status: z.enum(["planned", "running", "completed", "cancelled"]),
+  manifest: manifestSchema,
   manifest_sha256: z.string(),
   configuration_sha256: z.string(),
   report_sha256: z.string(),
@@ -134,6 +139,8 @@ export function Experiments() {
   const [page, setPage] = useState(1);
   const [repeats, setRepeats] = useState(1);
   const [protocol, setProtocol] = useState("2.0");
+  const partition = protocol === "3.0-test" ? "test" : "development";
+  const grouped = protocol.startsWith("3.0-");
   const key = useRef(crypto.randomUUID());
   const navigate = useNavigate();
   const list = useQuery({
@@ -158,31 +165,48 @@ export function Experiments() {
     queryKey: ["health"],
     queryFn: () => api("/health", healthSchema),
   });
+  const groupedPlans = useQuery({
+    queryKey: ["grouped-plans"],
+    queryFn: () =>
+      api(
+        "/evaluation/grouped-plans",
+        z.object({ development: manifestSchema, test: manifestSchema }),
+      ),
+    enabled: grouped,
+  });
   const create = useMutation({
     mutationFn: () =>
       api("/experiments", experimentSchema, {
         method: "POST",
         headers: { "Idempotency-Key": key.current },
-        body: JSON.stringify({
-          name: `development-${new Date().toISOString().slice(0, 10)}`,
-          repeats,
-          schema_version: protocol,
-          ...(protocol === "2.0" ? { multi_attempts: 4 } : {}),
-          cases: cases.data
-            ?.filter((c) =>
-              ["pagination", "imports", "signature"].includes(c.case_id),
-            )
-            .map((c) => ({
-              case_id: c.case_id,
-              snapshot_sha256: c.snapshot_sha256,
-              ...(protocol === "2.0" ? { log_sha256: c.log_sha256 } : {}),
-            })),
-          limits: {
-            max_wall_seconds: 600,
-            max_model_calls: 12,
-            max_tokens: 100000,
-          },
-        }),
+        body: JSON.stringify(
+          grouped
+            ? {
+                ...groupedPlans.data?.[partition],
+                repeats,
+                name: `grouped-${partition}-${new Date().toISOString().slice(0, 10)}`,
+              }
+            : {
+                name: `development-${new Date().toISOString().slice(0, 10)}`,
+                repeats,
+                schema_version: protocol,
+                ...(protocol === "2.0" ? { multi_attempts: 4 } : {}),
+                cases: cases.data
+                  ?.filter((c) =>
+                    ["pagination", "imports", "signature"].includes(c.case_id),
+                  )
+                  .map((c) => ({
+                    case_id: c.case_id,
+                    snapshot_sha256: c.snapshot_sha256,
+                    ...(protocol === "2.0" ? { log_sha256: c.log_sha256 } : {}),
+                  })),
+                limits: {
+                  max_wall_seconds: 600,
+                  max_model_calls: 12,
+                  max_tokens: 100000,
+                },
+              },
+        ),
       }),
     onSuccess: (data) => navigate(`/experiments/${data.id}`),
   });
@@ -201,7 +225,10 @@ export function Experiments() {
       <section className="panel padded">
         <h2>登记开发集对照</h2>
         <p>
-          分页、内部导入、调用签名三个案例。四组分别为仅日志解释、单次固定策略、四次独立固定策略与
+          {grouped
+            ? "20 个公开构造任务分为 10 项开发和 10 项测试，本次运行所选完整分区。"
+            : "分页、内部导入、调用签名三个案例。"}
+          四组分别为仅日志解释、单次固定策略、四次独立固定策略与
           Harness²；修复组使用相同模型、工具设置和总预算。每项最多 12
           次调用、100,000 Token、10
           分钟，经验库关闭。日志组不执行代码，诊断准确率尚未评分。
@@ -218,8 +245,18 @@ export function Experiments() {
           >
             <option value="2.0">四组对照</option>
             <option value="1.0">旧版两组对照</option>
+            <option value="3.0-development">
+              分组构造开发集 · 10 案例四组
+            </option>
+            <option value="3.0-test">分组构造测试集 · 10 案例四组</option>
           </select>
         </label>{" "}
+        {grouped && (
+          <p className="notice info">
+            将登记完整的{partition === "test" ? "测试" : "开发"}分区，固定 20
+            项清单及源码、日志和分组指纹，不接受挑选子集。仓库组为独立构造项目目录，样本全部公开，不代表真实仓库或未公开测试集。测试分区运行前应先固定参数；本协议经验库关闭。
+          </p>
+        )}
         {protocol === "1.0" && (
           <p className="small-note">
             旧版固定策略最多两次带反馈修正；不等同于四组实验的单次固定策略。
@@ -243,14 +280,21 @@ export function Experiments() {
           </select>
         </label>
         <p>
-          共 {(protocol === "2.0" ? 12 : 6) * repeats}{" "}
+          共 {(grouped ? 40 : protocol === "2.0" ? 12 : 6) * repeats}{" "}
           项执行。登记清单后可查看预算，再启动运行；会产生真实模型用量。
         </p>
-        <Failure error={cases.error ?? health.error ?? create.error} />
+        <Failure
+          error={
+            cases.error ?? groupedPlans.error ?? health.error ?? create.error
+          }
+        />
         <button
           className="button primary"
           disabled={
-            !cases.data || !health.data?.adaptive_ready || create.isPending
+            !cases.data ||
+            (grouped && !groupedPlans.data) ||
+            !health.data?.adaptive_ready ||
+            create.isPending
           }
           onClick={() => create.mutate()}
         >
@@ -368,7 +412,11 @@ export function ExperimentDetail() {
       </Link>
       <div className="page-title">
         <div>
-          <div className="eyebrow">PUBLIC DEVELOPMENT COMPARISON</div>
+          <div className="eyebrow">
+            {item.manifest.schema_version === "3.0"
+              ? "PUBLIC CONSTRUCTED GROUPED COMPARISON"
+              : "PUBLIC DEVELOPMENT COMPARISON"}
+          </div>
           <h1>{item.manifest.name}</h1>
           <p>
             {stateName[item.status]} · 已归档 {item.finished} / {item.planned}{" "}
@@ -382,7 +430,7 @@ export function ExperimentDetail() {
       </div>
       <section className="panel padded">
         <h2>固定设置</h2>
-        {item.manifest.schema_version === "2.0" && (
+        {["2.0", "3.0"].includes(item.manifest.schema_version ?? "") && (
           <p>
             日志解释组最多 2 次调用，不执行代码；单次固定策略 1 次尝试，多次组{" "}
             {item.manifest.multi_attempts}{" "}
@@ -400,6 +448,13 @@ export function ExperimentDetail() {
         <p className="small-note">
           源码、运行顺序、配置及预算已登记。关闭页面只暂停安排后续项目，当前任务仍继续；返回后可继续运行。
         </p>
+        {item.manifest.schema_version === "3.0" && (
+          <p className="small-note break-all">
+            公开构造分区：{item.manifest.partition === "test" ? "测试" : "开发"}
+            ；完整数据集指纹：<code>{item.manifest.dataset_sha256}</code>
+            。仅运行登记分区的全部案例。
+          </p>
+        )}
         <Failure error={detail.error ?? advance.error ?? cancel.error} />
         {!terminal && (
           <div className="experiment-controls">
@@ -569,12 +624,21 @@ export function ExperimentDetail() {
           </table>
         </div>
       </section>
-      <IndependentScore
-        id={item.id}
-        complete={item.status === "completed"}
-        protocol={item.manifest.schema_version}
-      />
-      {item.manifest.schema_version === "2.0" && (
+      {item.manifest.schema_version !== "3.0" ? (
+        <IndependentScore
+          id={item.id}
+          complete={item.status === "completed"}
+          protocol={item.manifest.schema_version}
+        />
+      ) : (
+        <section className="panel padded">
+          <h2>独立行为评测</h2>
+          <p>
+            分组构造任务尚无独立私有行为评分包。公开回归通过不代表端到端修复率，诊断审核另列。
+          </p>
+        </section>
+      )}
+      {["2.0", "3.0"].includes(item.manifest.schema_version ?? "") && (
         <DiagnosisScore
           id={item.id}
           complete={item.status === "completed"}

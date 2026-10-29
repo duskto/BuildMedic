@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "rollback",
+  "snapshot_sha256": "a68960f323e67f8cbe1d1dad1ea04f5b20a7e990f10b41f2f27d0d007299fd84",
+  "origin": "local-docker-target-capture",
+  "image_digest": "sha256:23449681af91bd411cb891effde770f0b081af16472495ef3423b9800381535e",
+  "log_sha256": "fb8e937018a73ef57aa9d9d06f0882cebc0852f784fc3020ba986aa6b0af626f",
+  "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________________________ test_contract _________________________________\n\n    def test_contract():\n        data = {'a': 1}\n        with pytest.raises(RuntimeError):\n            with transaction(data):\n                data['new'] = 2\n                raise RuntimeError('rollback')\n>       assert data == {'a': 1}\nE       AssertionError: assert {'a': 1, 'new': 2} == {'a': 1}\nE         \nE         Omitting 1 identical items, use -vv to show\nE         Left contains 1 more item:\nE         {'new': 2}\nE         Use -v to get more diff\n\ntests/test_case.py:11: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_case.py::test_contract - AssertionError: assert {'a': 1, 'n...\n1 failed in 0.02s\n"
+}

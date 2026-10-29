@@ -96,6 +96,6 @@ npm run test:live -- --grep 'adaptive:'
 
 远程固定 SHA 快照、登记 profile 与自适应执行已通过真实失败 Run 的完整网页验收：任务 `31c3aff1d1f14c15b1008e7e8d219658` 使用 7 次调用 / 65,432 Token，四个 rollout 和三个策略阶段完成，选中补丁经独立目标 / 回归均 8/8 通过。后续验收分支的 GitHub 复跑也成功，完整绑定及首轮预算失败记录见 [真实 GitHub 验收](github-acceptance.md)。这是单个已知公开案例的 P1 核心验收，不是泛化或策略收益评测。
 
-同会话经验发布、公开开发集四组对照及独立私有行为评分已接通。三个修复组均 3/3 通过公开检查，Harness² 消耗更多，未显示通过数收益；日志组只交付未评分诊断，见[评测记录](evaluation.md)。独立评分结果不传入 Proposer / Solver / 反思。诊断准确率、分组隔离测试集及正式部署仍未完成，P2 未整体完成。
+同会话经验发布、公开开发集四组对照及原三个案例的独立私有行为评分已接通。三个修复组均 3/3 通过公开检查，Harness² 消耗更多，未显示通过数收益；日志组只交付未评分诊断，见[评测记录](evaluation.md)。独立评分结果不传入 Proposer / Solver / 反思。[20 项公开构造分组任务](grouped-evaluation.md)已接入执行，尚未运行整批真实模型对照。真实诊断准确率、经验迁移收益、严格隔离测试和正式部署仍待完成，P2 未整体完成。
 
 上游来源：[spec.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/core/spec.py)、[schedule.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/core/schedule.py)、[recursion.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/core/recursion.py)、[demo.py](https://github.com/google-research/harness2/blob/1cfe254e8d25b15f37048c3730134686abe60335/harness2/demo.py)。

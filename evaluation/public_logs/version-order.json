@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "version-order",
+  "snapshot_sha256": "a2a40fd3439f0cd44f684681f7e44ea532b3534cf1692d4ccda3126bf818d733",
+  "origin": "local-docker-target-capture",
+  "image_digest": "sha256:23449681af91bd411cb891effde770f0b081af16472495ef3423b9800381535e",
+  "log_sha256": "57c6334d0456a459de3764cc851e2253f722f719c96dc07f906c4dcaf70ce537",
+  "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________________________ test_contract _________________________________\n\n    def test_contract():\n>       assert sorted_versions(['1.10', '1.2', '2.0']) == ['1.2', '1.10', '2.0']\nE       AssertionError: assert ['1.10', '1.2', '2.0'] == ['1.2', '1.10', '2.0']\nE         \nE         At index 0 diff: '1.10' != '1.2'\nE         Use -v to get more diff\n\ntests/test_case.py:5: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_case.py::test_contract - AssertionError: assert ['1.10', '1...\n1 failed in 0.02s\n"
+}

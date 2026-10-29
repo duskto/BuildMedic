@@ -1,5 +1,87 @@
 {
   "$defs": {
+    "DatasetCase": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "repository_group": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Repository Group",
+          "type": "string"
+        },
+        "template_group": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Template Group",
+          "type": "string"
+        },
+        "split": {
+          "enum": [
+            "development",
+            "test"
+          ],
+          "title": "Split",
+          "type": "string"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        },
+        "log_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Log Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id",
+        "repository_group",
+        "template_group",
+        "split",
+        "snapshot_sha256",
+        "log_sha256"
+      ],
+      "title": "DatasetCase",
+      "type": "object"
+    },
+    "DatasetManifest": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "purpose": {
+          "enum": [
+            "public-development",
+            "grouped-benchmark"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
+        "cases": {
+          "items": {
+            "$ref": "#/$defs/DatasetCase"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Cases",
+          "type": "array"
+        }
+      },
+      "required": [
+        "purpose",
+        "cases"
+      ],
+      "title": "DatasetManifest",
+      "type": "object"
+    },
     "EvaluationCase": {
       "additionalProperties": false,
       "properties": {
@@ -167,6 +249,111 @@
       "title": "FourArmSpec",
       "type": "object"
     },
+    "GroupedCase": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        },
+        "log_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Log Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id",
+        "snapshot_sha256",
+        "log_sha256"
+      ],
+      "title": "GroupedCase",
+      "type": "object"
+    },
+    "GroupedSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "3.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 _.:-]{0,79}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "dataset": {
+          "const": "public-constructed-grouped",
+          "default": "public-constructed-grouped",
+          "title": "Dataset",
+          "type": "string"
+        },
+        "cases": {
+          "items": {
+            "$ref": "#/$defs/GroupedCase"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Cases",
+          "type": "array"
+        },
+        "repeats": {
+          "default": 1,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Repeats",
+          "type": "integer"
+        },
+        "agent_tools": {
+          "default": false,
+          "title": "Agent Tools",
+          "type": "boolean"
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "multi_attempts": {
+          "default": 4,
+          "maximum": 4,
+          "minimum": 2,
+          "title": "Multi Attempts",
+          "type": "integer"
+        },
+        "partition": {
+          "enum": [
+            "development",
+            "test"
+          ],
+          "title": "Partition",
+          "type": "string"
+        },
+        "dataset_manifest": {
+          "$ref": "#/$defs/DatasetManifest"
+        },
+        "dataset_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Dataset Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "name",
+        "cases",
+        "partition",
+        "dataset_manifest",
+        "dataset_sha256"
+      ],
+      "title": "GroupedSpec",
+      "type": "object"
+    },
     "Limits": {
       "additionalProperties": false,
       "properties": {
@@ -202,6 +389,9 @@
     },
     {
       "$ref": "#/$defs/FourArmSpec"
+    },
+    {
+      "$ref": "#/$defs/GroupedSpec"
     }
   ]
 }

@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "mutable-default",
+  "snapshot_sha256": "de69e3032b31f925ce3a4bb8283cc609573d192bfcf5f48623c43ec2a079efc7",
+  "origin": "local-docker-target-capture",
+  "image_digest": "sha256:23449681af91bd411cb891effde770f0b081af16472495ef3423b9800381535e",
+  "log_sha256": "ea110a69a03d39dba46acd97af2f281e4ae52bf4737df6aab8045f45590db391",
+  "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________________________ test_contract _________________________________\n\n    def test_contract():\n        assert append_value(1) == [1]\n>       assert append_value(2) == [2]\nE       assert [1, 2] == [2]\nE         \nE         At index 0 diff: 1 != 2\nE         Left contains one more item: 2\nE         Use -v to get more diff\n\ntests/test_case.py:6: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_case.py::test_contract - assert [1, 2] == [2]\n1 failed in 0.02s\n"
+}

@@ -13,7 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import db, diagnosis_scoring, evaluation, evaluation_analysis, experiences, scoring, store
-from .cases import CASES, metadata
+from .cases import CASES, DEMO_CASE_IDS, metadata
 from .clients import ModelClient, RunnerClient
 from .config import settings
 from .database import require_schema
@@ -169,7 +169,7 @@ def demo_cases(request: Request):
                 "framework": "pytest",
                 "environment_status": "blocked" if case.get("blocked") else "requires_runner",
             }
-            for case_id, case in CASES.items()
+            for case_id, case in ((cid, CASES[cid]) for cid in DEMO_CASE_IDS)
         ],
     )
 
@@ -325,6 +325,13 @@ def list_experiments(request: Request, page: int = Query(1, ge=1), page_size: in
 @app.get("/api/v1/evaluation/cases")
 def evaluation_cases(request: Request):
     return envelope(request, evaluation.available_cases())
+
+
+@app.get("/api/v1/evaluation/grouped-plans")
+def grouped_plans(request: Request):
+    from .grouped_evaluation import plan
+
+    return envelope(request, {split: plan(split).model_dump() for split in ("development", "test")})
 
 
 @app.get("/api/v1/experiments/{eid}")

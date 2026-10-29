@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "csv-quoting",
+  "snapshot_sha256": "8f910d77874f3ae32ac212d29f6842ac3d0fcb6a2b9fe015dfa30fa26ecab7f3",
+  "origin": "local-docker-target-capture",
+  "image_digest": "sha256:23449681af91bd411cb891effde770f0b081af16472495ef3423b9800381535e",
+  "log_sha256": "f26bc6a47a93cb7441b3da690e36e86231e13fa46b998941cc5d8324022c366b",
+  "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________________________ test_contract _________________________________\n\n    def test_contract():\n        values = ['a,b', 'a\"b', 'plain']\n>       assert next(csv.reader(io.StringIO(encode_row(values)))) == values\nE       assert ['a\\\\', 'b', 'a\\\\\"b', 'plain'] == ['a,b', 'a\"b', 'plain']\nE         \nE         At index 0 diff: 'a\\\\' != 'a,b'\nE         Left contains one more item: 'plain'\nE         Use -v to get more diff\n\ntests/test_case.py:8: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_case.py::test_contract - assert ['a\\\\', 'b', 'a\\\\\"b', 'plai...\n1 failed in 0.02s\n"
+}

@@ -1,6 +1,7 @@
 import hashlib
 from pathlib import Path
 
+from .benchmark_cases import SYNTHETIC_CASES
 from .config import ROOT
 
 CASES = {
@@ -39,6 +40,10 @@ CASES = {
         "fingerprint": "ConnectionError: upstream service unavailable",
     },
 }
+DEMO_CASE_IDS = tuple(CASES)
+CASES.update(SYNTHETIC_CASES)
+
+EVALUATION_CASE_IDS = ("pagination", "imports", "signature", *SYNTHETIC_CASES)
 
 
 def case_dir(case_id):
@@ -61,7 +66,9 @@ def metadata(case_id):
     digest = source_hash(case_dir(case_id)) if not case.get("blocked") else None
     return {
         "case_id": case_id,
-        "repo": "local/buildmedic-demos",
+        "repo": "local/" + case["repository_group"]
+        if case_id in SYNTHETIC_CASES
+        else "local/buildmedic-demos",
         "head_sha": None,
         "snapshot_sha256": digest,
         "run_id": None,

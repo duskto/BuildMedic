@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "boolean-parser",
+  "snapshot_sha256": "c1373e7a8c655c77bc800069a573332186e12fb606bb919068dd065884f14e68",
+  "origin": "local-docker-target-capture",
+  "image_digest": "sha256:23449681af91bd411cb891effde770f0b081af16472495ef3423b9800381535e",
+  "log_sha256": "3d6bbcbf4fb36f474cc22c03aa99268e22759112adf31ae90cff3239e35b1ecf",
+  "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________________________ test_contract _________________________________\n\n    def test_contract():\n>       assert parse_boolean('false') is False\nE       AssertionError: assert True is False\nE        +  where True = parse_boolean('false')\n\ntests/test_case.py:5: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_case.py::test_contract - AssertionError: assert True is False\n1 failed in 0.02s\n"
+}

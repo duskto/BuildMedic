@@ -12,6 +12,16 @@ from .scoring_protocol import fingerprint
 Slug = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,79}$")]
 Sha = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 
+# Frozen public v1 identities: offline reports must not read today's source/log files.
+PUBLIC_IDENTITIES = {
+    "33ebbbb192dbde79de07123ab57237ca672cd5fe4146d7b2731a6f6e571e949e",
+    "234321f8ea43b6d11b17edf45cf0d89d445fe4123b8f90bb6fdd5082095f0dad",
+    "fb0c60c56130f08406b887ac7a380f6b266106802c9b1e7663af5a98dd81b618",
+    "b6bafcf94388a65fc5fdbd322c199a7e3221a48c7a288ce5f04d93e435326385",
+    "c50861523d999e7de9ce0811415ad975ee88a714f16c97e45e30e64f1bad77c6",
+    "47084c17a492408f5782fe3fd583eb3ab43649b4c67cdc8d5417521397c49170",
+}
+
 
 class DatasetCase(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -43,13 +53,11 @@ class DatasetManifest(BaseModel):
             if {getattr(c, axis) for c in dev} & {getattr(c, axis) for c in test}:
                 raise ValueError("split_overlap_" + axis)
         # Renaming a known public case cannot turn its source into a held-out sample.
-        from .evaluation import captured_log
-
         public_ids = {"pagination", "imports", "signature"}
-        public_sources = {captured_log(cid).snapshot_sha256 for cid in public_ids}
-        public_logs = {captured_log(cid).log_sha256 for cid in public_ids}
         if any(
-            c.case_id in public_ids or c.snapshot_sha256 in public_sources or c.log_sha256 in public_logs
+            c.case_id in public_ids
+            or c.snapshot_sha256 in PUBLIC_IDENTITIES
+            or c.log_sha256 in PUBLIC_IDENTITIES
             for c in test
         ):
             raise ValueError("known_public_case_cannot_be_test")

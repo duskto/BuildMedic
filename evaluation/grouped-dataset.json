@@ -1,0 +1,166 @@
+{
+  "schema_version": "1.0",
+  "purpose": "grouped-benchmark",
+  "cases": [
+    {
+      "case_id": "pagination",
+      "repository_group": "buildmedic-demo",
+      "template_group": "pagination",
+      "split": "development",
+      "snapshot_sha256": "33ebbbb192dbde79de07123ab57237ca672cd5fe4146d7b2731a6f6e571e949e",
+      "log_sha256": "b6bafcf94388a65fc5fdbd322c199a7e3221a48c7a288ce5f04d93e435326385"
+    },
+    {
+      "case_id": "imports",
+      "repository_group": "buildmedic-demo",
+      "template_group": "imports",
+      "split": "development",
+      "snapshot_sha256": "234321f8ea43b6d11b17edf45cf0d89d445fe4123b8f90bb6fdd5082095f0dad",
+      "log_sha256": "c50861523d999e7de9ce0811415ad975ee88a714f16c97e45e30e64f1bad77c6"
+    },
+    {
+      "case_id": "signature",
+      "repository_group": "buildmedic-demo",
+      "template_group": "signature",
+      "split": "development",
+      "snapshot_sha256": "fb0c60c56130f08406b887ac7a380f6b266106802c9b1e7663af5a98dd81b618",
+      "log_sha256": "47084c17a492408f5782fe3fd583eb3ab43649b4c67cdc8d5417521397c49170"
+    },
+    {
+      "case_id": "mutable-default",
+      "repository_group": "constructed-mutable-default",
+      "template_group": "state-isolation",
+      "split": "development",
+      "snapshot_sha256": "de69e3032b31f925ce3a4bb8283cc609573d192bfcf5f48623c43ec2a079efc7",
+      "log_sha256": "ea110a69a03d39dba46acd97af2f281e4ae52bf4737df6aab8045f45590db391"
+    },
+    {
+      "case_id": "csv-quoting",
+      "repository_group": "constructed-csv-quoting",
+      "template_group": "csv-serialization",
+      "split": "development",
+      "snapshot_sha256": "8f910d77874f3ae32ac212d29f6842ac3d0fcb6a2b9fe015dfa30fa26ecab7f3",
+      "log_sha256": "f26bc6a47a93cb7441b3da690e36e86231e13fa46b998941cc5d8324022c366b"
+    },
+    {
+      "case_id": "merge-precedence",
+      "repository_group": "constructed-merge-precedence",
+      "template_group": "merge-precedence",
+      "split": "development",
+      "snapshot_sha256": "84e9116362c6c19ea3531fb26dde0b72ccc90733e48f287a76b4540133141cda",
+      "log_sha256": "fac4d6ee131343d7baeba05e1125403eb050c888a8117f49cfd7bf5092110e0c"
+    },
+    {
+      "case_id": "stable-dedup",
+      "repository_group": "constructed-stable-dedup",
+      "template_group": "stable-deduplication",
+      "split": "development",
+      "snapshot_sha256": "f27999cc180e0a8b9f5c5b3a2178d70f1d76e70c8a6372a808b9943385a20afd",
+      "log_sha256": "5e78f87942cb723e0e5c6a220437e31ad1da9431798fd35d9175643e20e1c2b1"
+    },
+    {
+      "case_id": "fullmatch",
+      "repository_group": "constructed-fullmatch",
+      "template_group": "regex-validation-boundary",
+      "split": "development",
+      "snapshot_sha256": "67c1b2b0d8aabd4c3191f19016e022b00f9d42f8cf2aa0a2ea150e26932badf5",
+      "log_sha256": "153c0b6ab81adddecc3d098c28283ee2fd73d937ca24f6ff0ab8c86d0d520a62"
+    },
+    {
+      "case_id": "clamp",
+      "repository_group": "constructed-clamp",
+      "template_group": "interval-clamping",
+      "split": "development",
+      "snapshot_sha256": "463173f6971e1e2bb3f48e5a7ac1f3fc27c4663e0ae467eb4a67e8e828a468cd",
+      "log_sha256": "641713c47d691c2d96d4e5a0f8038984eb10ac216e36da2a8c2681f6fd9b2ccc"
+    },
+    {
+      "case_id": "weighted-mean",
+      "repository_group": "constructed-weighted-mean",
+      "template_group": "weighted-normalization",
+      "split": "development",
+      "snapshot_sha256": "d58e189dd45012995ae93f0b2b87e3623ce2e035b6b416d09aa5d64ec4d548f8",
+      "log_sha256": "82c9a5ae34aec133fef32f3579e1fc8ccdd26d8ae79fbfbc101ab088a15cdc7e"
+    },
+    {
+      "case_id": "graph-cycle",
+      "repository_group": "constructed-graph-cycle",
+      "template_group": "graph-recursion-stack",
+      "split": "test",
+      "snapshot_sha256": "766e07e595cf6950decf2be00b6f1cbe53a9725f840405dbe7d5be9819699c15",
+      "log_sha256": "8d0064a22251cf2fc3f4449649b1cd5210b61d50beff16cb0c8b8fef6000d237"
+    },
+    {
+      "case_id": "leap-year",
+      "repository_group": "constructed-leap-year",
+      "template_group": "gregorian-calendar",
+      "split": "test",
+      "snapshot_sha256": "dc749b49e6a8a009c2556efe2514bafe2fd39d4aff71aa71bd83ae2b02f82809",
+      "log_sha256": "8e529bf545820bf4167ef4e19701149b2514086e5005dc1152af9f25a50e51fe"
+    },
+    {
+      "case_id": "utf8-size",
+      "repository_group": "constructed-utf8-size",
+      "template_group": "encoding-byte-units",
+      "split": "test",
+      "snapshot_sha256": "e318ae322d754afc2de789df08fe32c6d095f7daad320924f00b3a0ccbe7acb7",
+      "log_sha256": "df13c91ab3d680a89c6e090d1581565d8dcc7f279e30468719634685c5b6073d"
+    },
+    {
+      "case_id": "version-order",
+      "repository_group": "constructed-version-order",
+      "template_group": "numeric-version-components",
+      "split": "test",
+      "snapshot_sha256": "a2a40fd3439f0cd44f684681f7e44ea532b3534cf1692d4ccda3126bf818d733",
+      "log_sha256": "57c6334d0456a459de3764cc851e2253f722f719c96dc07f906c4dcaf70ce537"
+    },
+    {
+      "case_id": "missing-sentinel",
+      "repository_group": "constructed-missing-sentinel",
+      "template_group": "missing-versus-falsy",
+      "split": "test",
+      "snapshot_sha256": "189492946f00187eebc156d9143479b63b18d47f9e817aef714a2957b3a289b3",
+      "log_sha256": "69b6b6dc98aff127d97f54b20a1acdb6cd4518e8e4b29893f3fe8e923c3d6644"
+    },
+    {
+      "case_id": "boolean-parser",
+      "repository_group": "constructed-boolean-parser",
+      "template_group": "boolean-type-coercion",
+      "split": "test",
+      "snapshot_sha256": "c1373e7a8c655c77bc800069a573332186e12fb606bb919068dd065884f14e68",
+      "log_sha256": "3d6bbcbf4fb36f474cc22c03aa99268e22759112adf31ae90cff3239e35b1ecf"
+    },
+    {
+      "case_id": "zip-length",
+      "repository_group": "constructed-zip-length",
+      "template_group": "input-cardinality-validation",
+      "split": "test",
+      "snapshot_sha256": "0fac878dd3bab98804826d323594a9f1c58de18104098ecea86dfdcf4de1910e",
+      "log_sha256": "2457dcf4814f05bdcf4d0aa479bc77a9d68bf1eac2940bf4e03187fa629cc1e9"
+    },
+    {
+      "case_id": "rollback",
+      "repository_group": "constructed-rollback",
+      "template_group": "exception-atomicity",
+      "split": "test",
+      "snapshot_sha256": "a68960f323e67f8cbe1d1dad1ea04f5b20a7e990f10b41f2f27d0d007299fd84",
+      "log_sha256": "fb8e937018a73ef57aa9d9d06f0882cebc0852f784fc3020ba986aa6b0af626f"
+    },
+    {
+      "case_id": "fraction-sign",
+      "repository_group": "constructed-fraction-sign",
+      "template_group": "rational-sign-normalization",
+      "split": "test",
+      "snapshot_sha256": "c8b30b848e5f13093a2960b11b70d5d71921516e0eb5beeaacb575a8c7cfa976",
+      "log_sha256": "466efe4bdfa91f9860f2108cd0176770523f515104e095939beec68cb6257b7c"
+    },
+    {
+      "case_id": "path-containment",
+      "repository_group": "constructed-path-containment",
+      "template_group": "path-component-containment",
+      "split": "test",
+      "snapshot_sha256": "ae409f2ad718bf174effbef80c7dbef2935f58bf51980398929fc2a6c73b0519",
+      "log_sha256": "3815c698960b56f8903e786713576511d41827727d7178ad5018b969595fdc3b"
+    }
+  ]
+}

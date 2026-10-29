@@ -25,6 +25,7 @@ API 根路径为 `/api/v1`。成功返回 `{data, request_id}`，错误返回 `{
 | GET | `/experience/snapshots/{id}` | 当前会话可见的冻结任务输入 |
 | POST / GET | `/experiments` | 幂等登记固定开发集清单 / 当前会话的对照列表 |
 | GET | `/evaluation/cases` | 可登记案例的源码与公开日志指纹 |
+| GET | `/evaluation/grouped-plans` | 20 项公开构造任务的完整开发 / 测试分区计划；不执行模型 |
 | GET | `/experiments/{id}` | 同预算执行与冻结结果的统计 |
 | POST | `/experiments/{id}/advance` | 返回当前任务或原子安排下一项；可安全重复 |
 | POST | `/experiments/{id}/cancel` | 停止后续安排并取消当前任务 |
@@ -74,6 +75,8 @@ GitHub GET 对暂时连接故障与 500 / 502 / 503 / 504 最多尝试三次；�
 `agent_tools=true` 显式启用原生工具循环，支持标准与自适应的登记来源，缺省关闭。工具任务最高 32 次调用 / 250,000 Token，且不能超过 `/health.max_model_calls`。标准至少 4 次 / 24,000 Token，自适应至少 11 次 / 48,000 Token，含经验反思时至少 12 次。前置配置不满足返回 `agent_tools_unavailable`，预算不足返回 `agent_budget_too_small`。未开启工具的任务仍最多 12 次调用，旧请求幂等 hash 兼容。`/health.agent_tools_ready` 表示配置就绪；不探测付费工具生成能力。快照增加 `agent_tools`、`agent_actions`，事件增加 `agent.tool_started` / `agent.tool_finished`，详见[工具边界与预算](agent-tools.md)。
 
 开发集对照支持 `schema_version=2.0` 的四组协议，要求固定本地案例、源码及公开日志 hash、修复组相同预算、重复次数与工具开关，经验库关闭。`multi_attempts` 为 2–4，默认 4；日志组最多 2 次调用且不使用源码或 Runner。旧版 `1.0` 保留原两组行为及复算口径。创建需要 Idempotency-Key，不执行模型；推进使用现有 Worker 与任务配额，不接受任意任务 ID 或客户端指标。四组任务的关联重试返回 `experiment_retry_unsupported`，重复实验需新建清单。快照的 `experiment_binding` 记录归属和组别，日志组 `reproduction_status=not_run`；诊断准确率未评分时保持 null。详见[评测 API](evaluation.md)。
+
+`schema_version=3.0` 另接受登记的 [20 项公开构造数据集](grouped-evaluation.md)及完整开发 / 测试分区。请求嵌入 `dataset_manifest`、`dataset_sha256` 和 `partition`，不接受挑选子集、客户端命令或自定义执行路径。沿用上述实验 API、轮换顺序、配额、同预算四组与冻结报告；创建和推进核对固定 Docker 镜像与日志。分组任务尚无独立私有行为包，`POST .../score` 仍拒绝此协议；独立人工诊断审核支持 2.0 / 3.0。
 
 独立评分只处理完成并冻结的四组 Docker 实验，每份实验保留一个固定请求；重复 POST 返回原请求，GET 可在服务恢复后推进同一请求。未启动时 GET 返回 null，未配置时 POST 返回 `scoring_unavailable`。签名、候选或请求绑定不匹配会拒绝回执；服务暂时不可达时保留 pending / running，不填造分数。完成的回执可在评分服务离线后继续读取。`/health.scoring_ready` 仅表示配置就绪。新评分表与旧任务 / 公开报告分开，原报告 hash 及 `hidden_verified=null` 不变，详见[指标口径](scoring.md)。内部 `/scorer/v1/jobs` 与 `/scorer/v1/jobs/{id}` 只用于受认证的 API / 评分节点通信。
 

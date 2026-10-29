@@ -340,8 +340,11 @@
       "type": "string"
     },
     "scope": {
-      "const": "public-development-descriptive",
       "default": "public-development-descriptive",
+      "enum": [
+        "public-development-descriptive",
+        "public-constructed-grouped-descriptive"
+      ],
       "title": "Scope",
       "type": "string"
     },

@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "fullmatch",
+  "snapshot_sha256": "67c1b2b0d8aabd4c3191f19016e022b00f9d42f8cf2aa0a2ea150e26932badf5",
+  "origin": "local-docker-target-capture",
+  "image_digest": "sha256:23449681af91bd411cb891effde770f0b081af16472495ef3423b9800381535e",
+  "log_sha256": "153c0b6ab81adddecc3d098c28283ee2fd73d937ca24f6ff0ab8c86d0d520a62",
+  "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________________________ test_contract _________________________________\n\n    def test_contract():\n>       assert valid_identifier('abc!') is False\nE       AssertionError: assert True is False\nE        +  where True = valid_identifier('abc!')\n\ntests/test_case.py:5: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_case.py::test_contract - AssertionError: assert True is False\n1 failed in 0.02s\n"
+}

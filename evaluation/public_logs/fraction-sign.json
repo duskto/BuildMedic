@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "fraction-sign",
+  "snapshot_sha256": "c8b30b848e5f13093a2960b11b70d5d71921516e0eb5beeaacb575a8c7cfa976",
+  "origin": "local-docker-target-capture",
+  "image_digest": "sha256:23449681af91bd411cb891effde770f0b081af16472495ef3423b9800381535e",
+  "log_sha256": "466efe4bdfa91f9860f2108cd0176770523f515104e095939beec68cb6257b7c",
+  "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________________________ test_contract _________________________________\n\n    def test_contract():\n>       assert reduce_fraction(2, -4) == (-1, 2)\nE       assert (1, -2) == (-1, 2)\nE         \nE         At index 0 diff: 1 != -1\nE         Use -v to get more diff\n\ntests/test_case.py:5: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_case.py::test_contract - assert (1, -2) == (-1, 2)\n1 failed in 0.02s\n"
+}

@@ -1,4 +1,105 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
+
+test("grouped registration preserves the complete frozen test partition and does not start tasks", async ({
+  page,
+}) => {
+  const testPlan = JSON.parse(
+    readFileSync(
+      new URL("../../../../evaluation/grouped-test.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const developmentPlan = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../../evaluation/grouped-development.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  let created: Record<string, unknown> | null = null;
+  await page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    let data: unknown;
+    if (path.endsWith("/health"))
+      data = {
+        model_ready: true,
+        model_id: "explicit-fixture",
+        adaptive_ready: true,
+        adaptive_message: "fixture",
+        runner: { ready: true, message: "fixture", backend: "docker" },
+      };
+    else if (path.endsWith("/evaluation/cases"))
+      data = developmentPlan.cases.slice(0, 3);
+    else if (path.endsWith("/evaluation/grouped-plans"))
+      data = { development: developmentPlan, test: testPlan };
+    else if (
+      path.endsWith("/experiments") &&
+      route.request().method() === "POST"
+    ) {
+      created = route.request().postDataJSON();
+      expect(created?.schema_version).toBe("3.0");
+      expect(created?.dataset_sha256).toBe(testPlan.dataset_sha256);
+      expect(created?.dataset_manifest).toEqual(testPlan.dataset_manifest);
+      expect(created?.cases).toEqual(testPlan.cases);
+      expect(created?.partition).toBe("test");
+      data = {
+        ...report,
+        id: "grouped-fixture",
+        manifest: created,
+        finished: 0,
+        planned: 40,
+        rows: [],
+        status: "planned",
+      };
+    } else if (path.endsWith("/experiments"))
+      data = { items: [], total: 0, page: 1, page_size: 10 };
+    else if (path.endsWith("/experiments/grouped-fixture"))
+      data = {
+        ...report,
+        id: "grouped-fixture",
+        manifest: created,
+        finished: 0,
+        planned: 40,
+        rows: [],
+        status: "planned",
+      };
+    else if (path.endsWith("/analysis"))
+      data = {
+        source_report_sha256: report.report_sha256,
+        complete: false,
+        environment_consistent: null,
+        repeat_results: [],
+        variation: [],
+        pairs: [],
+      };
+    else
+      throw new Error(
+        `Unexpected grouped fixture request: ${route.request().method()} ${path}`,
+      );
+    await route.fulfill({
+      json: { data, request_id: "explicit-grouped-fixture" },
+    });
+  });
+  await page.goto("/experiments");
+  await page
+    .getByRole("combobox", { name: "实验组别", exact: true })
+    .selectOption("3.0-test");
+  await expect(
+    page.getByText("共 40 项执行。", { exact: false }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "登记对照清单", exact: true }).click();
+  await expect(page).toHaveURL(/experiments\/grouped-fixture$/);
+  await expect(
+    page.getByText("公开构造分区：测试", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("分组构造任务尚无独立私有行为评分包。", { exact: false }),
+  ).toBeVisible();
+  expect(created).not.toBeNull();
+});
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/v1/health", (route) =>

@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "missing-sentinel",
+  "snapshot_sha256": "189492946f00187eebc156d9143479b63b18d47f9e817aef714a2957b3a289b3",
+  "origin": "local-docker-target-capture",
+  "image_digest": "sha256:23449681af91bd411cb891effde770f0b081af16472495ef3423b9800381535e",
+  "log_sha256": "69b6b6dc98aff127d97f54b20a1acdb6cd4518e8e4b29893f3fe8e923c3d6644",
+  "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________________________ test_contract _________________________________\n\n    def test_contract():\n        for value in [0, False, '', None]:\n>           assert value_or_default({'key': value}, 'key', 'fallback') == value\nE           AssertionError: assert 'fallback' == 0\nE            +  where 'fallback' = value_or_default({'key': 0}, 'key', 'fallback')\n\ntests/test_case.py:6: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_case.py::test_contract - AssertionError: assert 'fallback' ...\n1 failed in 0.02s\n"
+}

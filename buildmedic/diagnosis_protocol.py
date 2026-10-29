@@ -53,13 +53,13 @@ class ReviewRequest(BaseModel):
     id: str = Field(pattern=r"^[a-f0-9]{32}$")
     report_sha256: Sha
     rubric_sha256: Sha
-    rows: list[ReviewItem] = Field(min_length=1, max_length=36)
+    rows: list[ReviewItem] = Field(min_length=1, max_length=360)
 
     @model_validator(mode="after")
     def unique(self):
         if len({r.review_id for r in self.rows}) != len(self.rows):
             raise ValueError("duplicate_review_id")
-        if len(canonical(self.model_dump())) > 3000000:
+        if len(canonical(self.model_dump())) > 32000000:
             raise ValueError("review_size_limit")
         return self
 
@@ -81,7 +81,7 @@ class ReviewReceipt(BaseModel):
     request_sha256: Sha
     reviewer_sha256: Sha
     sealed_at: float = Field(gt=0, allow_inf_nan=False)
-    rows: list[Verdict] = Field(min_length=1, max_length=36)
+    rows: list[Verdict] = Field(min_length=1, max_length=360)
     signature: Sha
 
 

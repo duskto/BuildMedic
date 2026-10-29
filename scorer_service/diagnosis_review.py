@@ -26,7 +26,7 @@ def external_path(value):
 
 def read_private(path):
     path = external_path(path)
-    if path.stat().st_size > 4000000:
+    if path.stat().st_size > 34000000:
         raise ValueError("review_file_size_limit")
     return json.loads(path.read_bytes())
 
@@ -102,7 +102,7 @@ class Sheet(BaseModel):
     rubric_sha256: str
     reviewer: str = Field(default="", max_length=200)
     human_review_complete: StrictBool = False
-    rows: list[SheetRow] = Field(min_length=1, max_length=36)
+    rows: list[SheetRow] = Field(min_length=1, max_length=360)
 
 
 def export_sheet(request: ReviewRequest, rubric: Rubric):

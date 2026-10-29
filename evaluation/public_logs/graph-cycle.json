@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "graph-cycle",
+  "snapshot_sha256": "766e07e595cf6950decf2be00b6f1cbe53a9725f840405dbe7d5be9819699c15",
+  "origin": "local-docker-target-capture",
+  "image_digest": "sha256:23449681af91bd411cb891effde770f0b081af16472495ef3423b9800381535e",
+  "log_sha256": "8d0064a22251cf2fc3f4449649b1cd5210b61d50beff16cb0c8b8fef6000d237",
+  "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________________________ test_contract _________________________________\n\n    def test_contract():\n>       assert has_cycle({'a': ['b'], 'b': ['a']}) is True\nE       AssertionError: assert False is True\nE        +  where False = has_cycle({'a': ['b'], 'b': ['a']})\n\ntests/test_case.py:5: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_case.py::test_contract - AssertionError: assert False is True\n1 failed in 0.02s\n"
+}

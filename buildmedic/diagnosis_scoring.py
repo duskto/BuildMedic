@@ -37,7 +37,7 @@ def prepare(eid, owner):
         if experiment["status"] != "completed":
             raise store.Conflict("诊断审核要求整批实验结束并冻结")
         public = evaluation.render(experiment)
-        if public["manifest"]["schema_version"] != "2.0":
+        if public["manifest"]["schema_version"] not in {"2.0", "3.0"}:
             raise ValueError("diagnosis_review_requires_four_arms")
         rows, bindings = [], []
         for row, slot in zip(public["rows"], experiment["content"]["slots"], strict=True):

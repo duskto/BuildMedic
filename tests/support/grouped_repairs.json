@@ -1,0 +1,87 @@
+{
+  "mutable-default": {
+    "path": "src/demo/subject.py",
+    "before": "def append_value(value, bucket=[]):\n    bucket.append(value)\n    return bucket\n",
+    "after": "def append_value(value, bucket=None):\n    if bucket is None:\n        bucket = []\n    bucket.append(value)\n    return bucket\n"
+  },
+  "csv-quoting": {
+    "path": "src/demo/subject.py",
+    "before": "import csv\nimport io\n\n\ndef encode_row(values):\n    buffer = io.StringIO(newline=\"\")\n    writer = csv.writer(buffer, quoting=csv.QUOTE_NONE, escapechar=\"\\\\\", lineterminator=\"\\n\")\n    writer.writerow(values)\n    return buffer.getvalue()\n",
+    "after": "import csv\nimport io\n\n\ndef encode_row(values):\n    buffer = io.StringIO(newline=\"\")\n    writer = csv.writer(buffer, quoting=csv.QUOTE_MINIMAL, escapechar=\"\\\\\", lineterminator=\"\\n\")\n    writer.writerow(values)\n    return buffer.getvalue()\n"
+  },
+  "merge-precedence": {
+    "path": "src/demo/subject.py",
+    "before": "def merge_config(defaults, overrides):\n    return overrides | defaults\n",
+    "after": "def merge_config(defaults, overrides):\n    return defaults | overrides\n"
+  },
+  "stable-dedup": {
+    "path": "src/demo/subject.py",
+    "before": "def unique(values):\n    return sorted(set(values))\n",
+    "after": "def unique(values):\n    return list(dict.fromkeys(values))\n"
+  },
+  "fullmatch": {
+    "path": "src/demo/subject.py",
+    "before": "import re\n\n\ndef valid_identifier(value):\n    return re.match(r\"[A-Za-z_][A-Za-z_0-9]*\", value) is not None\n",
+    "after": "import re\n\n\ndef valid_identifier(value):\n    return re.fullmatch(r\"[A-Za-z_][A-Za-z_0-9]*\", value) is not None\n"
+  },
+  "clamp": {
+    "path": "src/demo/subject.py",
+    "before": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError(\"invalid interval\")\n    return min(low, max(high, value))\n",
+    "after": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError(\"invalid interval\")\n    return max(low, min(high, value))\n"
+  },
+  "weighted-mean": {
+    "path": "src/demo/subject.py",
+    "before": "def weighted_mean(values, weights):\n    if len(values) != len(weights) or not weights or sum(weights) <= 0:\n        raise ValueError(\"invalid weights\")\n    return sum(v * w for v, w in zip(values, weights)) / len(weights)\n",
+    "after": "def weighted_mean(values, weights):\n    if len(values) != len(weights) or not weights or sum(weights) <= 0:\n        raise ValueError(\"invalid weights\")\n    return sum(v * w for v, w in zip(values, weights)) / sum(weights)\n"
+  },
+  "graph-cycle": {
+    "path": "src/demo/subject.py",
+    "before": "def has_cycle(graph):\n    visited, active = set(), set()\n\n    def visit(node):\n        if node in active:\n            return False\n        if node in visited:\n            return False\n        active.add(node)\n        for child in graph.get(node, []):\n            if visit(child):\n                return True\n        active.remove(node)\n        visited.add(node)\n        return False\n\n    return any(visit(node) for node in graph)\n",
+    "after": "def has_cycle(graph):\n    visited, active = set(), set()\n\n    def visit(node):\n        if node in active:\n            return True\n        if node in visited:\n            return False\n        active.add(node)\n        for child in graph.get(node, []):\n            if visit(child):\n                return True\n        active.remove(node)\n        visited.add(node)\n        return False\n\n    return any(visit(node) for node in graph)\n"
+  },
+  "leap-year": {
+    "path": "src/demo/subject.py",
+    "before": "def is_leap(year):\n    return year % 4 == 0\n",
+    "after": "def is_leap(year):\n    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)\n"
+  },
+  "utf8-size": {
+    "path": "src/demo/subject.py",
+    "before": "def fits_utf8(value, max_bytes):\n    return len(value) <= max_bytes\n",
+    "after": "def fits_utf8(value, max_bytes):\n    return len(value.encode(\"utf-8\")) <= max_bytes\n"
+  },
+  "version-order": {
+    "path": "src/demo/subject.py",
+    "before": "def sorted_versions(versions):\n    return sorted(versions)\n",
+    "after": "def sorted_versions(versions):\n    return sorted(versions, key=lambda version: tuple(map(int, version.split(\".\"))))\n"
+  },
+  "missing-sentinel": {
+    "path": "src/demo/subject.py",
+    "before": "def value_or_default(mapping, key, default):\n    return mapping.get(key) or default\n",
+    "after": "def value_or_default(mapping, key, default):\n    return mapping[key] if key in mapping else default\n"
+  },
+  "boolean-parser": {
+    "path": "src/demo/subject.py",
+    "before": "def parse_boolean(value):\n    normalized = value.strip().lower()\n    if normalized not in {\"true\", \"false\"}:\n        raise ValueError(\"expected true or false\")\n    return bool(normalized)\n",
+    "after": "def parse_boolean(value):\n    normalized = value.strip().lower()\n    if normalized not in {\"true\", \"false\"}:\n        raise ValueError(\"expected true or false\")\n    return normalized == \"true\"\n"
+  },
+  "zip-length": {
+    "path": "src/demo/subject.py",
+    "before": "def pair_records(keys, values):\n    return list(zip(keys, values))\n",
+    "after": "def pair_records(keys, values):\n    return list(zip(keys, values, strict=True))\n"
+  },
+  "rollback": {
+    "path": "src/demo/subject.py",
+    "before": "from contextlib import contextmanager\n\n\n@contextmanager\ndef transaction(mapping):\n    snapshot = mapping.copy()\n    try:\n        yield mapping\n    except Exception:\n        mapping.update(snapshot)\n        raise\n",
+    "after": "from contextlib import contextmanager\n\n\n@contextmanager\ndef transaction(mapping):\n    snapshot = mapping.copy()\n    try:\n        yield mapping\n    except Exception:\n        mapping.clear()\n        mapping.update(snapshot)\n        raise\n"
+  },
+  "fraction-sign": {
+    "path": "src/demo/subject.py",
+    "before": "import math\n\n\ndef reduce_fraction(numerator, denominator):\n    if denominator == 0:\n        raise ValueError(\"zero denominator\")\n    divisor = math.gcd(numerator, denominator)\n    return numerator // divisor, denominator // divisor\n",
+    "after": "import math\n\n\ndef reduce_fraction(numerator, denominator):\n    if denominator == 0:\n        raise ValueError(\"zero denominator\")\n    divisor = math.gcd(numerator, denominator) * (-1 if denominator < 0 else 1)\n    return numerator // divisor, denominator // divisor\n"
+  },
+  "path-containment": {
+    "path": "src/demo/subject.py",
+    "before": "from pathlib import PurePosixPath\n\n\ndef is_within(path, root):\n    candidate, base = PurePosixPath(path), PurePosixPath(root)\n    if \"..\" in candidate.parts or \"..\" in base.parts:\n        return False\n    return str(candidate).startswith(str(base))\n",
+    "after": "from pathlib import PurePosixPath\n\n\ndef is_within(path, root):\n    candidate, base = PurePosixPath(path), PurePosixPath(root)\n    if \"..\" in candidate.parts or \"..\" in base.parts:\n        return False\n    return candidate.is_relative_to(base)\n"
+  }
+}

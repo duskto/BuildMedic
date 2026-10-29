@@ -9,10 +9,12 @@ from pydantic import Field, TypeAdapter, model_validator
 from sqlalchemy import func, select, update
 
 from . import db, store
-from .cases import metadata
+from .cases import EVALUATION_CASE_IDS, metadata
 from .config import HARNESS_SHA, ROOT, settings
 from .errors import Blocked
+from .evaluation_dataset import DatasetManifest, Sha, Slug
 from .schemas import TERMINAL, CreateTask, Limits, Source, StrictModel
+from .scoring_protocol import fingerprint
 from .security import sanitize
 
 
@@ -61,7 +63,35 @@ class FourArmSpec(ExperimentSpec):
     multi_attempts: int = Field(4, ge=2, le=4, strict=True)
 
 
-ExperimentRequest = ExperimentSpec | FourArmSpec
+class GroupedCase(FourArmCase):
+    case_id: Slug
+
+
+class GroupedSpec(FourArmSpec):
+    schema_version: Literal["3.0"]
+    dataset: Literal["public-constructed-grouped"] = "public-constructed-grouped"
+    partition: Literal["development", "test"]
+    dataset_manifest: DatasetManifest
+    dataset_sha256: Sha
+    cases: list[GroupedCase] = Field(min_length=1, max_length=30)
+
+    @model_validator(mode="after")
+    def complete_partition(self):
+        if self.dataset_manifest.purpose != "grouped-benchmark":
+            raise ValueError("grouped_experiment_requires_benchmark")
+        if fingerprint(self.dataset_manifest.model_dump()) != self.dataset_sha256:
+            raise ValueError("dataset_hash_mismatch")
+        expected = [
+            c.model_dump(include={"case_id", "snapshot_sha256", "log_sha256"})
+            for c in self.dataset_manifest.cases
+            if c.split == self.partition
+        ]
+        if [c.model_dump() for c in self.cases] != expected:
+            raise ValueError("complete_partition_required_without_cherry_picking")
+        return self
+
+
+ExperimentRequest = ExperimentSpec | FourArmSpec | GroupedSpec
 SPEC_ADAPTER = TypeAdapter(ExperimentRequest)
 
 
@@ -72,7 +102,7 @@ def parse_spec(value):
 def arms(spec):
     return (
         ("logs", "standard", "multi", "adaptive")
-        if spec.schema_version == "2.0"
+        if spec.schema_version in {"2.0", "3.0"}
         else ("standard", "adaptive")
     )
 
@@ -86,6 +116,7 @@ def arm_limits(spec, arm):
 
 
 class CapturedLog(EvaluationCase):
+    case_id: Slug
     schema_version: Literal["1.0"]
     origin: Literal["local-docker-target-capture"]
     image_digest: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
@@ -94,7 +125,7 @@ class CapturedLog(EvaluationCase):
 
 
 def captured_log(case_id):
-    if case_id not in {"pagination", "imports", "signature"}:
+    if case_id not in EVALUATION_CASE_IDS:
         raise store.Conflict("未登记公开日志案例")
     record = CapturedLog.model_validate_json(
         (ROOT / "evaluation" / "public_logs" / (case_id + ".json")).read_text()
@@ -125,6 +156,7 @@ def configuration():
     policy_files = (
         sorted((ROOT / "buildmedic").glob("*.py"))
         + sorted((ROOT / "evaluation" / "public_logs").glob("*.json"))
+        + [ROOT / "evaluation/grouped-dataset.json"]
         + sorted(p for p in (ROOT / "harnesses" / "base").rglob("*") if p.is_file())
     )
     return {
@@ -164,6 +196,22 @@ def load(conn, eid, owner):
     return row
 
 
+def validate_grouped(spec):
+    from .grouped_evaluation import registered_dataset
+
+    try:
+        registered = registered_dataset()
+    except (ValueError, OSError) as exc:
+        raise store.Conflict("登记分组数据集缺失或内容已变化") from exc
+    if registered != spec.dataset_manifest:
+        raise store.Conflict("仅接受管理员登记的完整分组数据集")
+    cfg = settings()
+    if cfg.runner_backend != "docker" or any(
+        captured_log(c.case_id).image_digest != cfg.runner_image for c in spec.cases
+    ):
+        raise store.Conflict("分组对照要求与归档日志一致的固定 Docker 镜像")
+
+
 def create(owner, key, spec):
     manifest = spec.model_dump(mode="json")
     request_hash = digest(manifest)
@@ -189,10 +237,15 @@ def create(owner, key, spec):
             >= 50
         ):
             raise store.Conflict("当前会话评测记录已达上限")
+        if spec.schema_version == "3.0":
+            validate_grouped(spec)
         for case in spec.cases:
             if metadata(case.case_id)["snapshot_sha256"] != case.snapshot_sha256:
                 raise store.Conflict("清单源码指纹与当前登记案例不一致")
-            if spec.schema_version == "2.0" and captured_log(case.case_id).log_sha256 != case.log_sha256:
+            if (
+                spec.schema_version in {"2.0", "3.0"}
+                and captured_log(case.case_id).log_sha256 != case.log_sha256
+            ):
                 raise store.Conflict("清单日志指纹与公开归档不一致")
         slots = []
         for repeat in range(spec.repeats):
@@ -275,6 +328,8 @@ def advance(eid, owner, check_task=None):
                 slot["frozen"] = freeze(conn, task)
                 continue
             assert_runtime(content)
+            if spec.schema_version == "3.0":
+                validate_grouped(spec)
             expected = next(c for c in spec.cases if c.case_id == slot["case_id"])
             meta = metadata(slot["case_id"])
             if meta["snapshot_sha256"] != expected.snapshot_sha256:
@@ -285,7 +340,15 @@ def advance(eid, owner, check_task=None):
                 "manifest_sha256": content["manifest_sha256"],
                 "configuration_sha256": content["configuration_sha256"],
             }
-            if spec.schema_version == "2.0":
+            if spec.schema_version == "3.0":
+                group = next(c for c in spec.dataset_manifest.cases if c.case_id == slot["case_id"])
+                meta["experiment_binding"].update(
+                    dataset_sha256=spec.dataset_sha256,
+                    partition=spec.partition,
+                    repository_group=group.repository_group,
+                    template_group=group.template_group,
+                )
+            if spec.schema_version in {"2.0", "3.0"}:
                 record = captured_log(slot["case_id"])
                 if record.log_sha256 != expected.log_sha256:
                     raise store.Conflict("公开归档日志已变化，不能继续当前清单")
@@ -404,10 +467,21 @@ def observed(snap):
 
 def render(row, include_rows=True):
     content = row["content"]
-    four_arm = content["manifest"]["schema_version"] == "2.0"
+    four_arm = content["manifest"]["schema_version"] in {"2.0", "3.0"}
     spec = parse_spec(content["manifest"]) if four_arm else None
+    if content["manifest"]["schema_version"] == "3.0":
+        expected = []
+        modes = arms(spec)
+        for repeat in range(spec.repeats):
+            for index, case in enumerate(spec.cases):
+                offset = (repeat + index) % len(modes)
+                expected.extend((case.case_id, repeat + 1, mode) for mode in modes[offset:] + modes[:offset])
+        actual = [(s["case_id"], s["repeat"], s["mode"]) for s in content["slots"]]
+        ids = [s["task_id"] for s in content["slots"] if s["task_id"]]
+        if actual != expected or len(ids) != len(set(ids)):
+            raise store.Conflict("分组报告任务顺序、完整分区或任务身份不匹配")
     rows = []
-    for slot in content["slots"]:
+    for slot_index, slot in enumerate(content["slots"]):
         record = {k: v for k, v in slot.items() if k != "frozen"}
         frozen = slot["frozen"]
         record["metrics"] = None
@@ -416,6 +490,36 @@ def render(row, include_rows=True):
         if frozen:
             if digest(frozen["snapshot"]) != frozen["sha256"]:
                 raise store.Conflict("评测归档指纹校验失败")
+            if content["manifest"]["schema_version"] == "3.0":
+                snap = frozen["snapshot"]
+                group = next(c for c in spec.dataset_manifest.cases if c.case_id == slot["case_id"])
+                binding = snap.get("experiment_binding", {})
+                log = snap.get("evaluation_log", {})
+                required = {
+                    "id": row["id"],
+                    "slot": slot_index,
+                    "manifest_sha256": content["manifest_sha256"],
+                    "configuration_sha256": content["configuration_sha256"],
+                    "dataset_sha256": spec.dataset_sha256,
+                    "partition": spec.partition,
+                    "repository_group": group.repository_group,
+                    "template_group": group.template_group,
+                    "protocol": "four-arm-v1",
+                    "arm": slot["mode"],
+                    "attempts": spec.multi_attempts if slot["mode"] == "multi" else 1,
+                }
+                if (
+                    binding != required
+                    or snap["id"] != slot["task_id"]
+                    or snap.get("case_id") != group.case_id
+                    or snap["snapshot_sha256"] != group.snapshot_sha256
+                    or log.get("case_id") != group.case_id
+                    or log.get("snapshot_sha256") != group.snapshot_sha256
+                    or log.get("log_sha256") != group.log_sha256
+                    or hashlib.sha256(log.get("log", "").encode()).hexdigest() != group.log_sha256
+                    or log.get("image_digest") != content["configuration"]["runner_image"]
+                ):
+                    raise store.Conflict("分组任务归档与固定来源、日志或执行协议不匹配")
             record.update(
                 metrics=observed(frozen["snapshot"]),
                 snapshot_sha256=frozen["sha256"],
@@ -481,6 +585,12 @@ def render(row, include_rows=True):
         "environment_consistent": len(environments) == 1 if environments else None,
         "rows": rows if include_rows else [],
     }
+    if content["manifest"]["schema_version"] == "3.0":
+        public["scope"] = (
+            "公开构造任务的分组对照；分区为 "
+            + content["manifest"]["partition"]
+            + "；未证明真实仓库泛化或独立行为修复率"
+        )
     public["report_sha256"] = digest(public)
     return public
 

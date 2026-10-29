@@ -273,6 +273,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/FourArmSpec"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GroupedSpec"
                   }
                 ],
                 "title": "Body"
@@ -355,6 +358,22 @@
       "get": {
         "summary": "Evaluation Cases",
         "operationId": "evaluation_cases_api_v1_evaluation_cases_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluation/grouped-plans": {
+      "get": {
+        "summary": "Grouped Plans",
+        "operationId": "grouped_plans_api_v1_evaluation_grouped_plans_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1485,6 +1504,88 @@
         ],
         "title": "CreateTask"
       },
+      "DatasetCase": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+            "title": "Case Id"
+          },
+          "repository_group": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+            "title": "Repository Group"
+          },
+          "template_group": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+            "title": "Template Group"
+          },
+          "split": {
+            "type": "string",
+            "enum": [
+              "development",
+              "test"
+            ],
+            "title": "Split"
+          },
+          "snapshot_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Snapshot Sha256"
+          },
+          "log_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Log Sha256"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "case_id",
+          "repository_group",
+          "template_group",
+          "split",
+          "snapshot_sha256",
+          "log_sha256"
+        ],
+        "title": "DatasetCase"
+      },
+      "DatasetManifest": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "1.0",
+            "title": "Schema Version",
+            "default": "1.0"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "public-development",
+              "grouped-benchmark"
+            ],
+            "title": "Purpose"
+          },
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/DatasetCase"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Cases"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "purpose",
+          "cases"
+        ],
+        "title": "DatasetManifest"
+      },
       "Distribution": {
         "properties": {
           "n": {
@@ -1634,7 +1735,10 @@
           },
           "scope": {
             "type": "string",
-            "const": "public-development-descriptive",
+            "enum": [
+              "public-development-descriptive",
+              "public-constructed-grouped-descriptive"
+            ],
             "title": "Scope",
             "default": "public-development-descriptive"
           },
@@ -1860,6 +1964,111 @@
           "cases"
         ],
         "title": "FourArmSpec"
+      },
+      "GroupedCase": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+            "title": "Case Id"
+          },
+          "snapshot_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Snapshot Sha256"
+          },
+          "log_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Log Sha256"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "case_id",
+          "snapshot_sha256",
+          "log_sha256"
+        ],
+        "title": "GroupedCase"
+      },
+      "GroupedSpec": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "3.0",
+            "title": "Schema Version"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9 _.:-]{0,79}$",
+            "title": "Name"
+          },
+          "dataset": {
+            "type": "string",
+            "const": "public-constructed-grouped",
+            "title": "Dataset",
+            "default": "public-constructed-grouped"
+          },
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/GroupedCase"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Cases"
+          },
+          "repeats": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Repeats",
+            "default": 1
+          },
+          "agent_tools": {
+            "type": "boolean",
+            "title": "Agent Tools",
+            "default": false
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
+          },
+          "multi_attempts": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 2.0,
+            "title": "Multi Attempts",
+            "default": 4
+          },
+          "partition": {
+            "type": "string",
+            "enum": [
+              "development",
+              "test"
+            ],
+            "title": "Partition"
+          },
+          "dataset_manifest": {
+            "$ref": "#/components/schemas/DatasetManifest"
+          },
+          "dataset_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Dataset Sha256"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "name",
+          "cases",
+          "partition",
+          "dataset_manifest",
+          "dataset_sha256"
+        ],
+        "title": "GroupedSpec"
       },
       "HTTPValidationError": {
         "properties": {

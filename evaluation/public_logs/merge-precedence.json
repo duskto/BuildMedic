@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "case_id": "merge-precedence",
+  "snapshot_sha256": "84e9116362c6c19ea3531fb26dde0b72ccc90733e48f287a76b4540133141cda",
+  "origin": "local-docker-target-capture",
+  "image_digest": "sha256:23449681af91bd411cb891effde770f0b081af16472495ef3423b9800381535e",
+  "log_sha256": "fac4d6ee131343d7baeba05e1125403eb050c888a8117f49cfd7bf5092110e0c",
+  "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________________________ test_contract _________________________________\n\n    def test_contract():\n>       assert merge_config({'port': 80}, {'port': 443}) == {'port': 443}\nE       AssertionError: assert {'port': 80} == {'port': 443}\nE         \nE         Differing items:\nE         {'port': 80} != {'port': 443}\nE         Use -v to get more diff\n\ntests/test_case.py:5: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_case.py::test_contract - AssertionError: assert {'port': 80...\n1 failed in 0.01s\n"
+}

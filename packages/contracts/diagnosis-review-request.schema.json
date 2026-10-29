@@ -140,7 +140,7 @@
       "items": {
         "$ref": "#/$defs/ReviewItem"
       },
-      "maxItems": 36,
+      "maxItems": 360,
       "minItems": 1,
       "title": "Rows",
       "type": "array"
