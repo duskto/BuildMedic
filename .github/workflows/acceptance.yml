@@ -1,0 +1,30 @@
+name: BuildMedic remote acceptance (intentional failure)
+
+on:
+  push:
+    branches:
+      - 'acceptance/github-pagination-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: src
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: '3.12.16'
+      - name: Install the pinned public test dependencies
+        run: |
+          uv venv --python 3.12.16
+          uv pip install -r requirements.lock
+      - name: Reproduce the intentional pagination defect
+        run: .venv/bin/python -m pytest -q -p no:cacheprovider tests --junitxml=report.xml
