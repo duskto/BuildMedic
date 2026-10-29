@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .scoring_protocol import fingerprint
+from .fingerprints import fingerprint
 
 Slug = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,79}$")]
 Sha = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]

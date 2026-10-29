@@ -7,6 +7,7 @@ import { healthSchema } from "./contracts";
 import { IndependentScore } from "./IndependentScore";
 import { DiagnosisScore } from "./DiagnosisScore";
 import { EvaluationAnalysis } from "./EvaluationAnalysis";
+import { FrozenGuidancePanel, frozenGuidanceSchema } from "./FrozenGuidance";
 
 const summarySchema = z.object({
   mode: z.enum(["logs", "standard", "multi", "adaptive"]),
@@ -72,6 +73,7 @@ export const experimentSchema = z.object({
   finished: z.number(),
   planned: z.number(),
   summary: z.array(summarySchema),
+  frozen_guidance: frozenGuidanceSchema.optional(),
   rows: z.array(
     z.object({
       case_id: z.string(),
@@ -139,8 +141,10 @@ export function Experiments() {
   const [page, setPage] = useState(1);
   const [repeats, setRepeats] = useState(1);
   const [protocol, setProtocol] = useState("2.0");
-  const partition = protocol === "3.0-test" ? "test" : "development";
-  const grouped = protocol.startsWith("3.0-");
+  const partition = protocol.endsWith("-test") ? "test" : "development";
+  const frozen = protocol.startsWith("4.0-");
+  const grouped = protocol.startsWith("3.0-") || frozen;
+  const [guidanceIds, setGuidanceIds] = useState<string[]>([]);
   const key = useRef(crypto.randomUUID());
   const navigate = useNavigate();
   const list = useQuery({
@@ -174,6 +178,25 @@ export function Experiments() {
       ),
     enabled: grouped,
   });
+  const guidanceVersions = useQuery({
+    queryKey: ["guidance-versions"],
+    queryFn: () =>
+      api(
+        "/evaluation/guidance-versions",
+        z.object({
+          items: z.array(
+            z.object({
+              id: z.string(),
+              source_case_id: z.string(),
+              version: z.number(),
+              cue: z.string(),
+              lesson: z.string(),
+            }),
+          ),
+        }),
+      ),
+    enabled: frozen,
+  });
   const create = useMutation({
     mutationFn: () =>
       api("/experiments", experimentSchema, {
@@ -183,6 +206,9 @@ export function Experiments() {
           grouped
             ? {
                 ...groupedPlans.data?.[partition],
+                ...(frozen
+                  ? { schema_version: "4.0", guidance_version_ids: guidanceIds }
+                  : {}),
                 repeats,
                 name: `grouped-${partition}-${new Date().toISOString().slice(0, 10)}`,
               }
@@ -230,8 +256,9 @@ export function Experiments() {
             : "分页、内部导入、调用签名三个案例。"}
           四组分别为仅日志解释、单次固定策略、四次独立固定策略与
           Harness²；修复组使用相同模型、工具设置和总预算。每项最多 12
-          次调用、100,000 Token、10
-          分钟，经验库关闭。日志组不执行代码，诊断准确率尚未评分。
+          次调用、100,000 Token、10 分钟，
+          {frozen ? "已选开发指导冻结共享，经验库不自动更新。" : "经验库关闭。"}
+          日志组不执行代码，诊断准确率尚未评分。
         </p>
         <label>
           实验组别{" "}
@@ -240,6 +267,7 @@ export function Experiments() {
             value={protocol}
             onChange={(e) => {
               setProtocol(e.target.value);
+              setGuidanceIds([]);
               key.current = crypto.randomUUID();
             }}
           >
@@ -249,6 +277,8 @@ export function Experiments() {
               分组构造开发集 · 10 案例四组
             </option>
             <option value="3.0-test">分组构造测试集 · 10 案例四组</option>
+            <option value="4.0-development">冻结开发指导 · 开发分区四组</option>
+            <option value="4.0-test">冻结开发指导 · 测试分区四组</option>
           </select>
         </label>{" "}
         {grouped && (
@@ -256,6 +286,47 @@ export function Experiments() {
             将登记完整的{partition === "test" ? "测试" : "开发"}分区，固定 20
             项清单及源码、日志和分组指纹，不接受挑选子集。仓库组为独立构造项目目录，样本全部公开，不代表真实仓库或未公开测试集。测试分区运行前应先固定参数；本协议经验库关闭。
           </p>
+        )}
+        {frozen && (
+          <fieldset className="break-all" style={{ minWidth: 0 }}>
+            <legend>明确选择开发指导（最多 5 个版本）</legend>
+            <p className="small-note">
+              仅列当前会话、策略兼容且来源链均为登记开发案例的已发布版本。登记时固定内容，三个修复组共享；可以选择空指导作为对照。
+            </p>
+            {guidanceVersions.data?.items.map((entry) => (
+              <label key={entry.id} className="small-note">
+                <input
+                  type="checkbox"
+                  checked={guidanceIds.includes(entry.id)}
+                  disabled={
+                    !guidanceIds.includes(entry.id) && guidanceIds.length >= 5
+                  }
+                  onChange={(e) => {
+                    setGuidanceIds((ids) =>
+                      e.target.checked
+                        ? [...ids, entry.id]
+                        : ids.filter((id) => id !== entry.id),
+                    );
+                    key.current = crypto.randomUUID();
+                  }}
+                />
+                {entry.source_case_id} v{entry.version} · {entry.cue}
+              </label>
+            ))}
+            {guidanceIds.length > 0 && (
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => {
+                  setGuidanceIds([]);
+                  key.current = crypto.randomUUID();
+                }}
+              >
+                清空所选指导（{guidanceIds.length}）
+              </button>
+            )}
+            {guidanceIds.length === 0 && <p>未选择开发指导，将冻结空指导。</p>}
+          </fieldset>
         )}
         {protocol === "1.0" && (
           <p className="small-note">
@@ -285,13 +356,18 @@ export function Experiments() {
         </p>
         <Failure
           error={
-            cases.error ?? groupedPlans.error ?? health.error ?? create.error
+            cases.error ??
+            groupedPlans.error ??
+            guidanceVersions.error ??
+            health.error ??
+            create.error
           }
         />
         <button
           className="button primary"
           disabled={
             !cases.data ||
+            (frozen && !guidanceVersions.data) ||
             (grouped && !groupedPlans.data) ||
             !health.data?.adaptive_ready ||
             create.isPending
@@ -413,7 +489,7 @@ export function ExperimentDetail() {
       <div className="page-title">
         <div>
           <div className="eyebrow">
-            {item.manifest.schema_version === "3.0"
+            {["3.0", "4.0"].includes(item.manifest.schema_version ?? "")
               ? "PUBLIC CONSTRUCTED GROUPED COMPARISON"
               : "PUBLIC DEVELOPMENT COMPARISON"}
           </div>
@@ -430,7 +506,7 @@ export function ExperimentDetail() {
       </div>
       <section className="panel padded">
         <h2>固定设置</h2>
-        {["2.0", "3.0"].includes(item.manifest.schema_version ?? "") && (
+        {["2.0", "3.0", "4.0"].includes(item.manifest.schema_version ?? "") && (
           <p>
             日志解释组最多 2 次调用，不执行代码；单次固定策略 1 次尝试，多次组{" "}
             {item.manifest.multi_attempts}{" "}
@@ -443,12 +519,15 @@ export function ExperimentDetail() {
           {item.manifest.limits.max_model_calls} 次调用 /{" "}
           {item.manifest.limits.max_tokens.toLocaleString()} Token /{" "}
           {item.manifest.limits.max_wall_seconds} 秒 · 工具循环
-          {item.manifest.agent_tools ? "开启" : "关闭"} · 经验库关闭
+          {item.manifest.agent_tools ? "开启" : "关闭"} ·{" "}
+          {item.frozen_guidance
+            ? "开发指导已冻结，经验库不自动更新"
+            : "经验库关闭"}
         </p>
         <p className="small-note">
           源码、运行顺序、配置及预算已登记。关闭页面只暂停安排后续项目，当前任务仍继续；返回后可继续运行。
         </p>
-        {item.manifest.schema_version === "3.0" && (
+        {["3.0", "4.0"].includes(item.manifest.schema_version ?? "") && (
           <p className="small-note break-all">
             公开构造分区：{item.manifest.partition === "test" ? "测试" : "开发"}
             ；完整数据集指纹：<code>{item.manifest.dataset_sha256}</code>
@@ -624,21 +703,16 @@ export function ExperimentDetail() {
           </table>
         </div>
       </section>
-      {item.manifest.schema_version !== "3.0" ? (
-        <IndependentScore
-          id={item.id}
-          complete={item.status === "completed"}
-          protocol={item.manifest.schema_version}
-        />
-      ) : (
-        <section className="panel padded">
-          <h2>独立行为评测</h2>
-          <p>
-            分组构造任务尚无独立私有行为评分包。公开回归通过不代表端到端修复率，诊断审核另列。
-          </p>
-        </section>
+      {item.frozen_guidance && (
+        <FrozenGuidancePanel value={item.frozen_guidance} />
       )}
-      {["2.0", "3.0"].includes(item.manifest.schema_version ?? "") && (
+      <IndependentScore
+        id={item.id}
+        complete={item.status === "completed"}
+        protocol={item.manifest.schema_version}
+        dataset={item.manifest.dataset}
+      />
+      {["2.0", "3.0", "4.0"].includes(item.manifest.schema_version ?? "") && (
         <DiagnosisScore
           id={item.id}
           complete={item.status === "completed"}

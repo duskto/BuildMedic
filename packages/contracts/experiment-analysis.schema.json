@@ -343,7 +343,8 @@
       "default": "public-development-descriptive",
       "enum": [
         "public-development-descriptive",
-        "public-constructed-grouped-descriptive"
+        "public-constructed-grouped-descriptive",
+        "public-constructed-frozen-guidance-descriptive"
       ],
       "title": "Scope",
       "type": "string"

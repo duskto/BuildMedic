@@ -1,5 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
+// Live artifacts include signed session cookies; restrict new files at creation.
+process.umask(0o077);
+
 export default defineConfig({
   testDir: "./tests/live",
   outputDir: "test-results/live",

@@ -570,13 +570,18 @@ def build_materials(ctx, case_id, outputs):
                 **selected["selection"],
             }
         )
-    return {
+    materials = {
         "goal": "修复固定快照中已复现的目标失败，保留所有既有测试行为",
         "source": source,
         "logs": "\n".join(contexts),
         "log_selection": selections,
         "evidence": store.snapshot(ctx.id)["evidence"],
     }
+    if ctx.snap.get("frozen_guidance") is not None:
+        from .frozen_guidance import model_material
+
+        materials["frozen_guidance"] = model_material(ctx.snap)
+    return materials
 
 
 async def validate(ctx, case_id, candidate, baseline, kind="independent", vid=None):

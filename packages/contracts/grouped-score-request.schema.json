@@ -1,0 +1,254 @@
+{
+  "$defs": {
+    "DatasetCase": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "repository_group": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Repository Group",
+          "type": "string"
+        },
+        "template_group": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Template Group",
+          "type": "string"
+        },
+        "split": {
+          "enum": [
+            "development",
+            "test"
+          ],
+          "title": "Split",
+          "type": "string"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        },
+        "log_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Log Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id",
+        "repository_group",
+        "template_group",
+        "split",
+        "snapshot_sha256",
+        "log_sha256"
+      ],
+      "title": "DatasetCase",
+      "type": "object"
+    },
+    "DatasetManifest": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "purpose": {
+          "enum": [
+            "public-development",
+            "grouped-benchmark"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
+        "cases": {
+          "items": {
+            "$ref": "#/$defs/DatasetCase"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Cases",
+          "type": "array"
+        }
+      },
+      "required": [
+        "purpose",
+        "cases"
+      ],
+      "title": "DatasetManifest",
+      "type": "object"
+    },
+    "GroupedScoreItem": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "maximum": 359,
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "task_id": {
+          "pattern": "^[a-f0-9]{32}$",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "case_id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "arm": {
+          "enum": [
+            "logs",
+            "standard",
+            "multi",
+            "adaptive"
+          ],
+          "title": "Arm",
+          "type": "string"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        },
+        "public_verified": {
+          "title": "Public Verified",
+          "type": "boolean"
+        },
+        "patch": {
+          "anyOf": [
+            {
+              "maxLength": 40000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Patch"
+        },
+        "patch_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Patch Sha256"
+        },
+        "repeat": {
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Repeat",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "task_id",
+        "case_id",
+        "arm",
+        "snapshot_sha256",
+        "public_verified",
+        "repeat"
+      ],
+      "title": "GroupedScoreItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2.0",
+      "default": "2.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-f0-9]{32}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "experiment_id": {
+      "pattern": "^[a-f0-9]{32}$",
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "report_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Report Sha256",
+      "type": "string"
+    },
+    "suite_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Suite Sha256",
+      "type": "string"
+    },
+    "image_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Image Digest",
+      "type": "string"
+    },
+    "dataset": {
+      "const": "public-constructed-grouped",
+      "default": "public-constructed-grouped",
+      "title": "Dataset",
+      "type": "string"
+    },
+    "rows": {
+      "items": {
+        "$ref": "#/$defs/GroupedScoreItem"
+      },
+      "maxItems": 360,
+      "minItems": 1,
+      "title": "Rows",
+      "type": "array"
+    },
+    "dataset_manifest": {
+      "$ref": "#/$defs/DatasetManifest"
+    },
+    "dataset_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Dataset Sha256",
+      "type": "string"
+    },
+    "partition": {
+      "enum": [
+        "development",
+        "test"
+      ],
+      "title": "Partition",
+      "type": "string"
+    },
+    "repeats": {
+      "maximum": 3,
+      "minimum": 1,
+      "title": "Repeats",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "experiment_id",
+    "report_sha256",
+    "suite_sha256",
+    "image_digest",
+    "rows",
+    "dataset_manifest",
+    "dataset_sha256",
+    "partition",
+    "repeats"
+  ],
+  "title": "GroupedScoreRequest",
+  "type": "object"
+}

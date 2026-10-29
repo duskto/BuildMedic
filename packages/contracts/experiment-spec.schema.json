@@ -249,6 +249,93 @@
       "title": "FourArmSpec",
       "type": "object"
     },
+    "FrozenGuidanceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "4.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 _.:-]{0,79}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "dataset": {
+          "const": "public-constructed-grouped",
+          "default": "public-constructed-grouped",
+          "title": "Dataset",
+          "type": "string"
+        },
+        "cases": {
+          "items": {
+            "$ref": "#/$defs/GroupedCase"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Cases",
+          "type": "array"
+        },
+        "repeats": {
+          "default": 1,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Repeats",
+          "type": "integer"
+        },
+        "agent_tools": {
+          "default": false,
+          "title": "Agent Tools",
+          "type": "boolean"
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        },
+        "multi_attempts": {
+          "default": 4,
+          "maximum": 4,
+          "minimum": 2,
+          "title": "Multi Attempts",
+          "type": "integer"
+        },
+        "partition": {
+          "enum": [
+            "development",
+            "test"
+          ],
+          "title": "Partition",
+          "type": "string"
+        },
+        "dataset_manifest": {
+          "$ref": "#/$defs/DatasetManifest"
+        },
+        "dataset_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Dataset Sha256",
+          "type": "string"
+        },
+        "guidance_version_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Guidance Version Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "name",
+        "cases",
+        "partition",
+        "dataset_manifest",
+        "dataset_sha256",
+        "guidance_version_ids"
+      ],
+      "title": "FrozenGuidanceSpec",
+      "type": "object"
+    },
     "GroupedCase": {
       "additionalProperties": false,
       "properties": {
@@ -392,6 +479,9 @@
     },
     {
       "$ref": "#/$defs/GroupedSpec"
+    },
+    {
+      "$ref": "#/$defs/FrozenGuidanceSpec"
     }
   ]
 }

@@ -1,0 +1,475 @@
+{
+  "scope": "public synthetic test vectors; never a production private assertion bundle",
+  "cases": {
+    "pagination": [
+      {
+        "entrypoint": "paginate",
+        "args": [
+          [
+            "synthetic-a",
+            "synthetic-b",
+            "synthetic-c",
+            "synthetic-d"
+          ],
+          1,
+          2
+        ],
+        "expected": [
+          "synthetic-a",
+          "synthetic-b"
+        ]
+      },
+      {
+        "entrypoint": "paginate",
+        "args": [
+          [
+            "synthetic-a"
+          ],
+          99,
+          2
+        ],
+        "expected": []
+      }
+    ],
+    "imports": [
+      {
+        "entrypoint": "invoice_total",
+        "args": [
+          [
+            123,
+            456
+          ]
+        ],
+        "expected": "¥5.79"
+      },
+      {
+        "entrypoint": "invoice_total",
+        "args": [
+          []
+        ],
+        "expected": "¥0.00"
+      }
+    ],
+    "signature": [
+      {
+        "entrypoint": "checkout",
+        "args": [
+          3,
+          "remote"
+        ],
+        "expected": 15
+      },
+      {
+        "entrypoint": "shipping_cost",
+        "args": [
+          3
+        ],
+        "kwargs": {
+          "region": "local"
+        },
+        "expected": 6
+      }
+    ],
+    "mutable-default": [
+      {
+        "entrypoint": "append_value",
+        "args": [
+          11
+        ],
+        "expected": [
+          11
+        ]
+      },
+      {
+        "entrypoint": "append_value",
+        "args": [
+          12
+        ],
+        "expected": [
+          12
+        ]
+      },
+      {
+        "entrypoint": "append_value",
+        "args": [
+          13,
+          []
+        ],
+        "expected": [
+          13
+        ]
+      }
+    ],
+    "csv-quoting": [
+      {
+        "entrypoint": "encode_row",
+        "args": [
+          [
+            "with,comma",
+            "simple"
+          ]
+        ],
+        "expected": "\"with,comma\",simple\n"
+      },
+      {
+        "entrypoint": "encode_row",
+        "args": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "expected": "a,b\n"
+      }
+    ],
+    "merge-precedence": [
+      {
+        "entrypoint": "merge_config",
+        "args": [
+          {
+            "a": 1
+          },
+          {
+            "a": 2,
+            "b": 3
+          }
+        ],
+        "expected": {
+          "a": 2,
+          "b": 3
+        }
+      },
+      {
+        "entrypoint": "merge_config",
+        "args": [
+          {
+            "a": 1
+          },
+          {}
+        ],
+        "expected": {
+          "a": 1
+        }
+      }
+    ],
+    "stable-dedup": [
+      {
+        "entrypoint": "unique",
+        "args": [
+          [
+            9,
+            2,
+            9,
+            4
+          ]
+        ],
+        "expected": [
+          9,
+          2,
+          4
+        ]
+      },
+      {
+        "entrypoint": "unique",
+        "args": [
+          []
+        ],
+        "expected": []
+      }
+    ],
+    "fullmatch": [
+      {
+        "entrypoint": "valid_identifier",
+        "args": [
+          "x-y"
+        ],
+        "expected": false
+      },
+      {
+        "entrypoint": "valid_identifier",
+        "args": [
+          "x_7"
+        ],
+        "expected": true
+      }
+    ],
+    "clamp": [
+      {
+        "entrypoint": "clamp",
+        "args": [
+          8,
+          -5,
+          4
+        ],
+        "expected": 4
+      },
+      {
+        "entrypoint": "clamp",
+        "args": [
+          -1,
+          2,
+          2
+        ],
+        "expected": 2
+      }
+    ],
+    "weighted-mean": [
+      {
+        "entrypoint": "weighted_mean",
+        "args": [
+          [
+            3,
+            9
+          ],
+          [
+            2,
+            1
+          ]
+        ],
+        "expected": 5.0
+      },
+      {
+        "entrypoint": "weighted_mean",
+        "args": [
+          [
+            3
+          ],
+          [
+            1
+          ]
+        ],
+        "expected": 3.0
+      }
+    ],
+    "graph-cycle": [
+      {
+        "entrypoint": "has_cycle",
+        "args": [
+          {
+            "x": [
+              "y"
+            ],
+            "y": [
+              "z"
+            ],
+            "z": [
+              "x"
+            ]
+          }
+        ],
+        "expected": true
+      },
+      {
+        "entrypoint": "has_cycle",
+        "args": [
+          {}
+        ],
+        "expected": false
+      }
+    ],
+    "leap-year": [
+      {
+        "entrypoint": "is_leap",
+        "args": [
+          2100
+        ],
+        "expected": false
+      },
+      {
+        "entrypoint": "is_leap",
+        "args": [
+          2400
+        ],
+        "expected": true
+      }
+    ],
+    "utf8-size": [
+      {
+        "entrypoint": "fits_utf8",
+        "args": [
+          "aé",
+          2
+        ],
+        "expected": false
+      },
+      {
+        "entrypoint": "fits_utf8",
+        "args": [
+          "a",
+          1
+        ],
+        "expected": true
+      }
+    ],
+    "version-order": [
+      {
+        "entrypoint": "sorted_versions",
+        "args": [
+          [
+            "3.11",
+            "3.9",
+            "4.0"
+          ]
+        ],
+        "expected": [
+          "3.9",
+          "3.11",
+          "4.0"
+        ]
+      },
+      {
+        "entrypoint": "sorted_versions",
+        "args": [
+          []
+        ],
+        "expected": []
+      }
+    ],
+    "missing-sentinel": [
+      {
+        "entrypoint": "value_or_default",
+        "args": [
+          {
+            "zero": 0
+          },
+          "zero",
+          5
+        ],
+        "expected": 0
+      },
+      {
+        "entrypoint": "value_or_default",
+        "args": [
+          {},
+          "key",
+          5
+        ],
+        "expected": 5
+      }
+    ],
+    "boolean-parser": [
+      {
+        "entrypoint": "parse_boolean",
+        "args": [
+          "false"
+        ],
+        "expected": false
+      },
+      {
+        "entrypoint": "parse_boolean",
+        "args": [
+          "true"
+        ],
+        "expected": true
+      }
+    ],
+    "zip-length": [
+      {
+        "entrypoint": "pair_records",
+        "args": [
+          [
+            "q",
+            "r"
+          ],
+          [
+            1
+          ]
+        ],
+        "raises": "ValueError"
+      },
+      {
+        "entrypoint": "pair_records",
+        "args": [
+          [
+            "q"
+          ],
+          [
+            1
+          ]
+        ],
+        "expected": [
+          [
+            "q",
+            1
+          ]
+        ]
+      }
+    ],
+    "rollback": [
+      {
+        "entrypoint": "rollback_mapping",
+        "args": [
+          {
+            "base": 1
+          },
+          {
+            "fresh": 2
+          },
+          [
+            "base"
+          ]
+        ],
+        "expected": {
+          "base": 1
+        }
+      },
+      {
+        "entrypoint": "rollback_mapping",
+        "args": [
+          {
+            "base": 1
+          },
+          {
+            "base": 2
+          },
+          []
+        ],
+        "expected": {
+          "base": 1
+        }
+      }
+    ],
+    "fraction-sign": [
+      {
+        "entrypoint": "reduce_fraction",
+        "args": [
+          5,
+          -10
+        ],
+        "expected": [
+          -1,
+          2
+        ]
+      },
+      {
+        "entrypoint": "reduce_fraction",
+        "args": [
+          6,
+          9
+        ],
+        "expected": [
+          2,
+          3
+        ]
+      }
+    ],
+    "path-containment": [
+      {
+        "entrypoint": "is_within",
+        "args": [
+          "/srv/data-old/a",
+          "/srv/data"
+        ],
+        "expected": false
+      },
+      {
+        "entrypoint": "is_within",
+        "args": [
+          "/srv/data/a",
+          "/srv/data"
+        ],
+        "expected": true
+      }
+    ]
+  }
+}

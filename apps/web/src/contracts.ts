@@ -412,6 +412,9 @@ export const caseSchema = z
   .passthrough();
 export const healthSchema = z.object({
   scoring_ready: z.boolean().optional(),
+  scoring_dataset: z
+    .enum(["public-development", "public-constructed-grouped"])
+    .optional(),
   model_ready: z.boolean(),
   model_id: z.string().nullable(),
   runner: z
@@ -429,7 +432,7 @@ export const healthSchema = z.object({
 export const modelCheckSchema = z.object({
   provider: z.string(),
   model_id: z.string(),
-  status: z.literal("available"),
+  status: z.enum(["available", "unverified"]),
   checked_at: z.number(),
   message: z.string(),
 });

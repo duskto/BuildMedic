@@ -147,6 +147,8 @@ class DockerObserver:
             for answer, probe in zip(answers, probes):
                 if not isinstance(answer, dict) or type(answer.get("ok")) is not bool:
                     raise ObservationError("observation_protocol")
+                if answer.get("ok") is False and answer.get("exception") == "ObservationError":
+                    raise ObservationError("observation_encoding")
                 if probe.raises:
                     matched = answer.get("ok") is False and answer.get("exception") == probe.raises
                 else:
@@ -164,6 +166,8 @@ def evaluate(request, bundle, observer):
     baselines, rows = {}, []
     for item in request.rows:
         row = {key: getattr(item, key) for key in ("index", "task_id", "case_id", "arm", "patch_sha256")}
+        if request.schema_version == "2.0":
+            row["repeat"] = item.repeat
         row.update(
             status="not_applicable" if item.arm == "logs" else "no_candidate",
             hidden_verified=None,

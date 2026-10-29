@@ -27,6 +27,13 @@ def policy(ctx):
         raise Blocked("实验任务的日志不再匹配登记归档")
     if arm == "logs" and ctx.body.get("agent_tools"):
         raise Blocked("日志解释组不能使用工具循环")
+    if binding.get("guidance_sha256"):
+        from .frozen_guidance import model_material
+
+        if ctx.body.get("experience") or (arm == "logs" and ctx.snap.get("frozen_guidance") is not None):
+            raise Blocked("冻结指导实验不允许在线经验更新或向日志组提供开发指导")
+        if arm != "logs" and model_material(ctx.snap) is None:
+            raise Blocked("冻结指导实验缺少固定输入")
     return binding
 
 

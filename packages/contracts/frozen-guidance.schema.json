@@ -1,0 +1,275 @@
+{
+  "$defs": {
+    "Lesson": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-f0-9]{32}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "source_task_id": {
+          "pattern": "^[a-f0-9]{32}$",
+          "title": "Source Task Id",
+          "type": "string"
+        },
+        "source_case_id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Source Case Id",
+          "type": "string"
+        },
+        "source_snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Source Snapshot Sha256",
+          "type": "string"
+        },
+        "domain": {
+          "maxLength": 100,
+          "title": "Domain",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "model": {
+          "maxLength": 200,
+          "title": "Model",
+          "type": "string"
+        },
+        "parent_version_ids": {
+          "items": {
+            "pattern": "^[a-f0-9]{32}$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Parent Version Ids",
+          "type": "array"
+        },
+        "cue": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Cue",
+          "type": "string"
+        },
+        "lesson": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Lesson",
+          "type": "string"
+        },
+        "edits": {
+          "maxLength": 600,
+          "title": "Edits",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "content_hash",
+        "source_task_id",
+        "source_case_id",
+        "source_snapshot_sha256",
+        "domain",
+        "version",
+        "model",
+        "parent_version_ids",
+        "cue",
+        "lesson",
+        "edits"
+      ],
+      "title": "Lesson",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-f0-9]{32}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "source_task_id": {
+          "pattern": "^[a-f0-9]{32}$",
+          "title": "Source Task Id",
+          "type": "string"
+        },
+        "source_case_id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+          "title": "Source Case Id",
+          "type": "string"
+        },
+        "source_snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Source Snapshot Sha256",
+          "type": "string"
+        },
+        "domain": {
+          "maxLength": 100,
+          "title": "Domain",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "model": {
+          "maxLength": 200,
+          "title": "Model",
+          "type": "string"
+        },
+        "parent_version_ids": {
+          "items": {
+            "pattern": "^[a-f0-9]{32}$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Parent Version Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "content_hash",
+        "source_task_id",
+        "source_case_id",
+        "source_snapshot_sha256",
+        "domain",
+        "version",
+        "model",
+        "parent_version_ids"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "TrainingUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "tasks": {
+          "maximum": 50,
+          "minimum": 0,
+          "title": "Tasks",
+          "type": "integer"
+        },
+        "calls": {
+          "minimum": 0,
+          "title": "Calls",
+          "type": "integer"
+        },
+        "tokens": {
+          "minimum": 0,
+          "title": "Tokens",
+          "type": "integer"
+        },
+        "unknown_usage_tasks": {
+          "maximum": 50,
+          "minimum": 0,
+          "title": "Unknown Usage Tasks",
+          "type": "integer"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cost Usd"
+        }
+      },
+      "required": [
+        "tasks",
+        "calls",
+        "tokens",
+        "unknown_usage_tasks",
+        "cost_usd"
+      ],
+      "title": "TrainingUsage",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "policy": {
+      "const": "shared-development-guidance",
+      "default": "shared-development-guidance",
+      "title": "Policy",
+      "type": "string"
+    },
+    "dataset_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Dataset Sha256",
+      "type": "string"
+    },
+    "profile_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Profile Hash",
+      "type": "string"
+    },
+    "version_ids": {
+      "items": {
+        "pattern": "^[a-f0-9]{32}$",
+        "type": "string"
+      },
+      "maxItems": 5,
+      "title": "Version Ids",
+      "type": "array"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/Lesson"
+      },
+      "maxItems": 5,
+      "title": "Entries",
+      "type": "array"
+    },
+    "ancestry": {
+      "items": {
+        "$ref": "#/$defs/Provenance"
+      },
+      "maxItems": 50,
+      "title": "Ancestry",
+      "type": "array"
+    },
+    "training_usage": {
+      "$ref": "#/$defs/TrainingUsage"
+    },
+    "sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Sha256",
+      "type": "string"
+    }
+  },
+  "required": [
+    "dataset_sha256",
+    "profile_hash",
+    "version_ids",
+    "entries",
+    "ancestry",
+    "training_usage",
+    "sha256"
+  ],
+  "title": "FrozenGuidance",
+  "type": "object"
+}

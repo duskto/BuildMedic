@@ -22,7 +22,16 @@ from .github import GitHubClient
 from .harness_support import capability
 from .logs import LogWindow, log_window
 from .profiles import match_profile
-from .schemas import CreateTask, Envelope, Lifecycle, Preview, TaskPage, TaskSnapshot, ValidationRequest
+from .schemas import (
+    CreateTask,
+    Envelope,
+    Lifecycle,
+    ModelCheck,
+    Preview,
+    TaskPage,
+    TaskSnapshot,
+    ValidationRequest,
+)
 from .security import read_owner, sanitize, sign_owner
 
 
@@ -142,11 +151,12 @@ async def health(request: Request):
             "agent_tools_ready": settings().agent_tools_ready,
             "max_model_calls": settings().max_model_calls,
             "scoring_ready": settings().scoring_ready,
+            "scoring_dataset": settings().scorer_dataset,
         },
     )
 
 
-@app.post("/api/v1/model/check")
+@app.post("/api/v1/model/check", response_model=Envelope[ModelCheck])
 async def check_model(request: Request):
     model = ModelClient()
     try:
@@ -251,7 +261,7 @@ def check_mode(body):
         if not settings().agent_tools_ready:
             raise AppError(
                 "agent_tools_unavailable",
-                "工具诊断需配置兼容 Function Calling 的模型，DeepSeek 需关闭思考模式",
+                "工具诊断需配置兼容 Function Calling 的模型；DeepSeek、Kimi、GLM 需支持并关闭思考模式",
                 422,
             )
         minimum = (12 if body.experience else 11) if body.mode == "adaptive" else 4
@@ -332,6 +342,13 @@ def grouped_plans(request: Request):
     from .grouped_evaluation import plan
 
     return envelope(request, {split: plan(split).model_dump() for split in ("development", "test")})
+
+
+@app.get("/api/v1/evaluation/guidance-versions")
+def evaluation_guidance_versions(request: Request):
+    from .frozen_guidance import available
+
+    return envelope(request, available(request.state.owner))
 
 
 @app.get("/api/v1/experiments/{eid}")

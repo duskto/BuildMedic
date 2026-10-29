@@ -343,7 +343,20 @@ def execute(tid, claimed, provider, runner=None):
 
 
 @pytest.mark.parametrize("mode", ["standard", "adaptive"])
-def test_native_tools_read_search_propose_check_and_submit_then_independent_validation(environment, mode):
+@pytest.mark.parametrize("provider", ["compatible", "kimi", "glm", "openai"])
+def test_native_tools_read_search_propose_check_and_submit_then_independent_validation(
+    environment, mode, provider, monkeypatch
+):
+    from buildmedic.model_providers import OFFICIAL_ENDPOINTS
+
+    if provider != "compatible":
+        cfg = settings()
+        host, path = min(OFFICIAL_ENDPOINTS[provider])
+        monkeypatch.setattr(cfg, "model_provider", provider)
+        monkeypatch.setattr(cfg, "model_base_url", "https://" + host + path)
+        monkeypatch.setattr(
+            cfg, "model_id", {"kimi": "kimi-k2.6", "glm": "glm-5.3", "openai": "gpt-4.1"}[provider]
+        )
     if mode == "adaptive":
         pytest.importorskip("harness2")
     tid, claimed = task(mode)

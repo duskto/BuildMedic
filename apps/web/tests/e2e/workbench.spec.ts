@@ -192,6 +192,44 @@ test("model connection check stays on the server and displays an actionable fail
   expect(checks).toBe(1);
 });
 
+test("unsupported model-list probe shows unverified rather than a successful connection", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/health", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          model_ready: true,
+          model_id: "glm-5.3",
+          runner: { ready: false, message: "fixture", backend: "docker" },
+          adaptive_ready: false,
+          adaptive_message: "fixture",
+        },
+        request_id: "probe-fixture",
+      },
+    }),
+  );
+  await page.route("**/api/v1/model/check", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          provider: "glm",
+          model_id: "glm-5.3",
+          status: "unverified",
+          checked_at: 1,
+          message: "当前接口不支持模型列表检查；尚未验证密钥或生成能力。",
+        },
+        request_id: "probe-fixture",
+      },
+    }),
+  );
+  await page.goto("/tasks/new");
+  await page.getByRole("button", { name: "检查模型连接" }).click();
+  const notice = page.getByRole("status");
+  await expect(notice).toContainText("尚未验证密钥或生成能力");
+  await expect(notice).not.toHaveClass(/success/);
+});
+
 test("adaptive mode uses its shared budget and is disabled for remote logs", async ({
   page,
 }) => {

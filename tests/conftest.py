@@ -15,7 +15,10 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "model_api_key", "")
     monkeypatch.setattr(cfg, "model_id", "")
     monkeypatch.setattr(cfg, "model_provider", "compatible")
+    monkeypatch.setattr(cfg, "model_endpoint_mode", "official")
+    monkeypatch.setattr(cfg, "model_token_parameter", "auto")
     monkeypatch.setattr(cfg, "model_thinking", "disabled")
+    monkeypatch.setattr(cfg, "model_reasoning_effort", None)
     monkeypatch.setattr(cfg, "adaptive_enabled", False)
     monkeypatch.setattr(cfg, "runner_profiles", None)
     monkeypatch.setattr(cfg, "github_token", "")
@@ -23,6 +26,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "scorer_url", "")
     monkeypatch.setattr(cfg, "scorer_token", "")
     monkeypatch.setattr(cfg, "scorer_suite_sha256", "")
+    monkeypatch.setattr(cfg, "scorer_dataset", "public-development")
     monkeypatch.setattr(cfg, "diagnosis_review_key", "")
     monkeypatch.setattr(cfg, "diagnosis_rubric_sha256", "")
     monkeypatch.setattr(cfg, "runner_token", "test-internal-runner-token")
@@ -40,6 +44,86 @@ def client():
     with TestClient(app, backend_options={"use_uvloop": True}) as client:
         client.get("/api/v1/demo-cases")
         yield client
+
+
+@pytest.fixture
+def grouped_scoring_bundle():
+    import json
+
+    from buildmedic.config import ROOT
+    from buildmedic.grouped_evaluation import registered_dataset
+    from buildmedic.scoring_protocol import fingerprint
+    from scorer_service.bundle import GroupedBundle
+
+    manifest = registered_dataset()
+    vectors = json.loads((ROOT / "tests/support/synthetic_probes.json").read_text())["cases"]
+    return GroupedBundle.model_validate(
+        {
+            "schema_version": "2.0",
+            "suite_id": "synthetic-grouped-behavior",
+            "version": 1,
+            "dataset": "public-constructed-grouped",
+            "dataset_manifest": manifest.model_dump(),
+            "dataset_sha256": fingerprint(manifest.model_dump()),
+            "cases": [
+                {
+                    "case_id": c.case_id,
+                    "group": c.template_group,
+                    "snapshot_sha256": c.snapshot_sha256,
+                    "probes": vectors[c.case_id],
+                }
+                for c in manifest.cases
+            ],
+        }
+    )
+
+
+@pytest.fixture
+def grouped_score_request(grouped_scoring_bundle):
+    import hashlib
+
+    from buildmedic.scoring_protocol import GroupedScoreRequest, fingerprint
+    from buildmedic.store import uid
+
+    def make(partition="test", repeats=1, patches=None):
+        manifest = grouped_scoring_bundle.dataset_manifest
+        cases = [c for c in manifest.cases if c.split == partition]
+        rows = []
+        modes = ("logs", "standard", "multi", "adaptive")
+        for repeat in range(repeats):
+            for index, case in enumerate(cases):
+                offset = (repeat + index) % 4
+                for arm in modes[offset:] + modes[:offset]:
+                    patch = (patches or {}).get(case.case_id) if arm != "logs" else None
+                    rows.append(
+                        {
+                            "index": len(rows),
+                            "task_id": uid(),
+                            "case_id": case.case_id,
+                            "snapshot_sha256": case.snapshot_sha256,
+                            "repeat": repeat + 1,
+                            "arm": arm,
+                            "public_verified": patch is not None,
+                            "patch": patch,
+                            "patch_sha256": hashlib.sha256(patch.encode()).hexdigest()
+                            if patch is not None
+                            else None,
+                        }
+                    )
+        return GroupedScoreRequest(
+            id=uid(),
+            experiment_id=uid(),
+            report_sha256="a" * 64,
+            suite_sha256=fingerprint(grouped_scoring_bundle.model_dump()),
+            image_digest="sha256:" + "1" * 64,
+            dataset_manifest=manifest,
+            dataset_sha256=grouped_scoring_bundle.dataset_sha256,
+            partition=partition,
+            repeats=repeats,
+            rows=rows,
+        )
+
+    return make
 
 
 @pytest.fixture

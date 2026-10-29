@@ -4,17 +4,14 @@ import json
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, JsonValue, model_validator
+from pydantic import Field, JsonValue, TypeAdapter, model_validator
 
 from buildmedic.config import ROOT
+from buildmedic.evaluation_dataset import DatasetManifest, Sha, Slug
 from buildmedic.schemas import StrictModel
 from buildmedic.scoring_protocol import CaseId, canonical, fingerprint
 
-ENTRYPOINTS = {
-    "pagination": {"paginate"},
-    "imports": {"invoice_total"},
-    "signature": {"shipping_cost", "checkout", "quote_order"},
-}
+from .probe import ALLOWED as ENTRYPOINTS
 
 
 class Probe(StrictModel):
@@ -33,7 +30,7 @@ class PrivateCase(StrictModel):
 
     @model_validator(mode="after")
     def registered_functions(self):
-        if any(p.entrypoint not in ENTRYPOINTS[self.case_id] for p in self.probes):
+        if any(p.entrypoint not in ENTRYPOINTS.get(self.case_id, set()) for p in self.probes):
             raise ValueError("未登记的行为入口")
         if len(canonical(self.model_dump())) > 16000:
             raise ValueError("私有案例超出输入上限")
@@ -62,6 +59,41 @@ class Bundle(StrictModel):
         return self
 
 
+class GroupedPrivateCase(PrivateCase):
+    case_id: Slug
+
+
+class GroupedBundle(StrictModel):
+    schema_version: Literal["2.0"]
+    suite_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{2,79}$")
+    version: int = Field(ge=1, strict=True)
+    dataset: Literal["public-constructed-grouped"]
+    dataset_manifest: DatasetManifest
+    dataset_sha256: Sha
+    cases: list[GroupedPrivateCase] = Field(min_length=20, max_length=30)
+
+    @model_validator(mode="after")
+    def complete_catalog(self):
+        manifest = self.dataset_manifest
+        if (
+            manifest.purpose != "grouped-benchmark"
+            or fingerprint(manifest.model_dump()) != self.dataset_sha256
+        ):
+            raise ValueError("private_bundle_dataset_mismatch")
+        cases = {c.case_id: c for c in self.cases}
+        if len(cases) != len(self.cases) or set(cases) != {c.case_id for c in manifest.cases}:
+            raise ValueError("private_bundle_requires_complete_catalog")
+        for case in manifest.cases:
+            private = cases[case.case_id]
+            if private.snapshot_sha256 != case.snapshot_sha256 or private.group != case.template_group:
+                raise ValueError("private_bundle_group_or_source_mismatch")
+        canonical(self.model_dump())
+        return self
+
+
+BUNDLE_ADAPTER = TypeAdapter(Bundle | GroupedBundle)
+
+
 def load_bundle(path):
     path = Path(path).absolute()
     if (
@@ -70,7 +102,7 @@ def load_bundle(path):
         or any(p.is_symlink() for p in path.parents)
     ):
         raise ValueError("私有评分材料必须位于工作区外，不能通过符号链接指向工作区")
-    if path.stat().st_size > 100000:
+    if path.stat().st_size > 600000:
         raise ValueError("私有评分包超出大小限制")
-    bundle = Bundle.model_validate(json.loads(path.read_text()))
+    bundle = BUNDLE_ADAPTER.validate_python(json.loads(path.read_text()))
     return bundle, fingerprint(bundle.model_dump())

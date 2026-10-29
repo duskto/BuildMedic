@@ -23,13 +23,17 @@ class Settings(BaseSettings):
     model_base_url: str = ""
     model_api_key: str = ""
     model_id: str = ""
-    model_provider: Literal["compatible", "deepseek"] = "compatible"
+    model_provider: Literal["compatible", "deepseek", "kimi", "glm", "openai"] = "compatible"
+    model_endpoint_mode: Literal["official", "relay"] = "official"
+    model_token_parameter: Literal["auto", "max_tokens", "max_completion_tokens"] = "auto"
     model_thinking: Literal["enabled", "disabled"] = "disabled"
+    model_reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"] | None = None
     github_token: str = ""
     github_log_cache_enabled: bool = True
     scorer_url: str = ""
     scorer_token: str = ""
     scorer_suite_sha256: str = ""
+    scorer_dataset: Literal["public-development", "public-constructed-grouped"] = "public-development"
     diagnosis_review_key: str = ""
     diagnosis_rubric_sha256: str = ""
     runner_profiles: Path | None = None
@@ -48,13 +52,25 @@ class Settings(BaseSettings):
     def optional_profiles(cls, value):
         return None if value == "" else value
 
+    @field_validator("model_provider", mode="before")
+    @classmethod
+    def provider_alias(cls, value):
+        return {"chatgpt": "openai", "moonshot": "kimi", "zhipu": "glm"}.get(value, value)
+
+    @field_validator("model_reasoning_effort", mode="before")
+    @classmethod
+    def optional_reasoning_effort(cls, value):
+        return None if value == "" else value
+
     @property
     def model_ready(self):
         return bool(self.model_base_url and self.model_api_key and self.model_id)
 
     @property
     def agent_tools_ready(self):
-        return self.model_ready and (self.model_provider != "deepseek" or self.model_thinking == "disabled")
+        from .model_providers import tools_supported
+
+        return self.model_ready and tools_supported(self)
 
     @property
     def scoring_ready(self):

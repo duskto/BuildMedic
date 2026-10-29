@@ -30,7 +30,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ModelCheck_"
+                }
               }
             }
           }
@@ -276,6 +278,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/GroupedSpec"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FrozenGuidanceSpec"
                   }
                 ],
                 "title": "Body"
@@ -374,6 +379,22 @@
       "get": {
         "summary": "Grouped Plans",
         "operationId": "grouped_plans_api_v1_evaluation_grouped_plans_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluation/guidance-versions": {
+      "get": {
+        "summary": "Evaluation Guidance Versions",
+        "operationId": "evaluation_guidance_versions_api_v1_evaluation_guidance_versions_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1682,6 +1703,23 @@
         ],
         "title": "Envelope[LogWindow]"
       },
+      "Envelope_ModelCheck_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ModelCheck"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "request_id"
+        ],
+        "title": "Envelope[ModelCheck]"
+      },
       "Envelope_TaskPage_": {
         "properties": {
           "data": {
@@ -1737,7 +1775,8 @@
             "type": "string",
             "enum": [
               "public-development-descriptive",
-              "public-constructed-grouped-descriptive"
+              "public-constructed-grouped-descriptive",
+              "public-constructed-frozen-guidance-descriptive"
             ],
             "title": "Scope",
             "default": "public-development-descriptive"
@@ -1964,6 +2003,93 @@
           "cases"
         ],
         "title": "FourArmSpec"
+      },
+      "FrozenGuidanceSpec": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "4.0",
+            "title": "Schema Version"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9 _.:-]{0,79}$",
+            "title": "Name"
+          },
+          "dataset": {
+            "type": "string",
+            "const": "public-constructed-grouped",
+            "title": "Dataset",
+            "default": "public-constructed-grouped"
+          },
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/GroupedCase"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Cases"
+          },
+          "repeats": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Repeats",
+            "default": 1
+          },
+          "agent_tools": {
+            "type": "boolean",
+            "title": "Agent Tools",
+            "default": false
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
+          },
+          "multi_attempts": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 2.0,
+            "title": "Multi Attempts",
+            "default": 4
+          },
+          "partition": {
+            "type": "string",
+            "enum": [
+              "development",
+              "test"
+            ],
+            "title": "Partition"
+          },
+          "dataset_manifest": {
+            "$ref": "#/components/schemas/DatasetManifest"
+          },
+          "dataset_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Dataset Sha256"
+          },
+          "guidance_version_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Guidance Version Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "name",
+          "cases",
+          "partition",
+          "dataset_manifest",
+          "dataset_sha256",
+          "guidance_version_ids"
+        ],
+        "title": "FrozenGuidanceSpec"
       },
       "GroupedCase": {
         "properties": {
@@ -2195,6 +2321,44 @@
           "next_column"
         ],
         "title": "LogWindow"
+      },
+      "ModelCheck": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Model Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unverified"
+            ],
+            "title": "Status"
+          },
+          "checked_at": {
+            "type": "number",
+            "title": "Checked At"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "model_id",
+          "status",
+          "checked_at",
+          "message"
+        ],
+        "title": "ModelCheck"
       },
       "PairedResult": {
         "properties": {

@@ -181,6 +181,80 @@ def test_native_library_reflection_then_publish_and_reuse_frozen_version(adaptiv
     assert experiences.get_version(second["id"], "owner")["content"]["parent_version_ids"] == [version["id"]]
 
 
+def test_frozen_development_guidance_is_shared_without_reflection_or_live_library_updates(
+    adaptive_environment,
+    monkeypatch,
+):
+    from buildmedic.grouped_evaluation import plan
+
+    teacher, claimed = task(experience=True)
+    run(run_claimed(teacher, claimed, runner=InProcessRunner(), model=ScriptedAdaptiveModel()))
+    version = experiences.publish(teacher, "owner", "frozen-guidance-teacher")
+    monkeypatch.setattr(settings(), "runner_backend", "docker")
+    monkeypatch.setattr(settings(), "runner_image", evaluation.captured_log("pagination").image_digest)
+    value = plan("development").model_dump()
+    value.update(schema_version="4.0", guidance_version_ids=[version["id"]])
+    eid = evaluation.create("owner", "native-frozen-guidance", evaluation.parse_spec(value))
+    pack = evaluation.get(eid, "owner")["frozen_guidance"]
+    experiences.revoke(version["id"], "owner")
+
+    class GuidedModel(ScriptedAdaptiveModel):
+        def __init__(self):
+            super().__init__()
+            self.guidance_inputs = []
+
+        async def complete(self, messages):
+            body = json.loads(messages[1]["content"])
+            materials = body.get("materials")
+            if materials is not None and materials.get("source") == []:
+                assert "frozen_guidance" not in materials
+                self.calls.append("log_diagnosis")
+                return json.dumps(
+                    {
+                        "failure_category": "test",
+                        "summary": "scripted log-only hypothesis",
+                        "root_cause": {
+                            "description": "public log",
+                            "evidence_ids": [materials["evidence"][0]["id"]],
+                            "certainty": "hypothesis",
+                        },
+                        "next_action": "inspect source separately",
+                    }
+                ), {"total_tokens": 100}
+            if materials is not None:
+                self.guidance_inputs.append(materials["frozen_guidance"])
+            assert body.get("harness2_role") != "reflection"
+            return await super().complete(messages)
+
+    projections = []
+    tid = evaluation.advance(eid, "owner")["task_id"]
+    for arm in ("logs", "standard", "multi", "adaptive"):
+        assert store.snapshot(tid)["experiment_binding"]["arm"] == arm
+        model = GuidedModel()
+        run(run_claimed(tid, store.claim(tid), runner=InProcessRunner(), model=model))
+        snap = store.snapshot(tid)
+        assert snap["outcome"] == ("diagnosed_only" if arm == "logs" else "repaired"), snap["message"]
+        assert not snap.get("experience")
+        if arm != "logs":
+            assert all(item == model.guidance_inputs[0] for item in model.guidance_inputs)
+            projections.append(model.guidance_inputs[0])
+        if arm == "adaptive":
+            assert len(model.proposal_contexts) == 3
+            assert all(
+                any(pack["sha256"] in text for text in context.values())
+                for context in model.proposal_contexts
+            )
+            assert model.calls.count("diagnosis") == 4 and model.calls.count("proposal") == 3
+        tid = evaluation.advance(eid, "owner")["task_id"]
+    assert projections[0] == projections[1] == projections[2]
+    assert projections[0]["sha256"] == pack["sha256"]
+    assert (
+        evaluation.get(eid, "owner")["frozen_guidance"]["training_usage"]["calls"]
+        == store.snapshot(teacher)["usage"]["calls"]
+    )
+    evaluation.cancel(eid, "owner")
+
+
 @pytest.mark.parametrize("mode", ["none", "invalid", "failed_checks", "budget"])
 def test_reflection_cannot_publish_missing_invalid_or_unverified_lesson(adaptive_environment, mode):
     class ReflectionModel(ScriptedAdaptiveModel):

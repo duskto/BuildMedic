@@ -60,3 +60,4 @@ jobs:
           export BUILDMEDIC_TEST_DOCKER_IMAGE="$(docker image inspect buildmedic-pytest:local --format '{{.Id}}')"
           uv run --extra adaptive pytest tests/integration/test_docker_runner.py tests/integration/test_remote.py tests/integration/test_scoring_docker.py -q
           uv run --extra adaptive pytest tests/integration/test_constructed_cases.py -k docker -q
+          uv run --extra adaptive pytest tests/integration/test_grouped_scoring_docker.py -q

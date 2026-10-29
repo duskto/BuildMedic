@@ -46,10 +46,12 @@ export function IndependentScore({
   id,
   complete,
   protocol,
+  dataset = "public-development",
 }: {
   id: string;
   complete: boolean;
   protocol?: string;
+  dataset?: string;
 }) {
   const cache = useQueryClient();
   const health = useQuery({
@@ -71,12 +73,14 @@ export function IndependentScore({
     onSuccess: (data) => cache.setQueryData(["independent-score", id], data),
   });
   const value = score.data;
+  const matchingDataset =
+    (health.data?.scoring_dataset ?? "public-development") === dataset;
   const error = score.error ?? start.error;
   return (
     <section className="panel padded">
       <h2>独立行为评测</h2>
       <p>
-        实验全部结束后，另由评分服务检查冻结补丁。私有断言不会提供给诊断模型；此处只展示评分回执，原公开结果保持不变。当前范围为公开开发案例；诊断准确率通过单独的人工审核记录，隔离测试集尚未评分。
+        实验全部结束后，另由评分服务检查冻结补丁。私有断言不会提供给诊断模型；此处展示签名回执。诊断准确率通过单独的人工审核记录，行为检查的覆盖范围以回执为准。
       </p>
       {error && (
         <p role="alert" className="notice warning">
@@ -89,8 +93,9 @@ export function IndependentScore({
             className="button secondary"
             disabled={
               !complete ||
-              protocol !== "2.0" ||
+              !["2.0", "3.0", "4.0"].includes(protocol ?? "") ||
               !health.data?.scoring_ready ||
+              !matchingDataset ||
               start.isPending ||
               score.isPending
             }
@@ -101,11 +106,13 @@ export function IndependentScore({
           <p className="small-note">
             {!complete
               ? "请先完成整批实验。"
-              : protocol !== "2.0"
+              : !["2.0", "3.0", "4.0"].includes(protocol ?? "")
                 ? "旧版两组清单不参与此评分。"
                 : !health.data?.scoring_ready
                   ? "尚未配置独立评分服务。"
-                  : "将运行额外容器检查，不请求模型；每份冻结实验仅保留一次评分。"}
+                  : !matchingDataset
+                    ? "评分服务配置的数据集与当前实验不一致，请配置对应评分包。"
+                    : "将运行额外容器检查，不请求模型；每份冻结实验仅保留一次评分。"}
           </p>
         </>
       )}

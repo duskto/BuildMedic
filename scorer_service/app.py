@@ -17,7 +17,14 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from buildmedic.config import ROOT
-from buildmedic.scoring_protocol import ScoreReceipt, ScoreRequest, fingerprint, sign_receipt
+from buildmedic.scoring_protocol import (
+    RECEIPT_ADAPTER,
+    REQUEST_ADAPTER,
+    GroupedScoreRequest,
+    ScoreSubmission,
+    fingerprint,
+    sign_receipt,
+)
 
 from .bundle import load_bundle
 from .engine import DockerObserver, evaluate
@@ -35,9 +42,15 @@ class Runtime:
     def __init__(self, cfg):
         self.cfg = cfg
         self.bundle, self.suite_hash = load_bundle(cfg.bundle_path)
-        from buildmedic import scoring_protocol
+        from buildmedic import evaluation_dataset, fingerprints, schemas, scoring_protocol
 
-        code_files = [*Path(__file__).parent.glob("*.py"), Path(scoring_protocol.__file__)]
+        code_files = [
+            *Path(__file__).parent.glob("*.py"),
+            *(
+                Path(module.__file__)
+                for module in (scoring_protocol, fingerprints, evaluation_dataset, schemas)
+            ),
+        ]
         self.code_hash = fingerprint({p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in code_files})
         self.root = cfg.state_dir.absolute()
         if self.root.resolve().is_relative_to(ROOT.resolve()) or any(
@@ -50,7 +63,7 @@ class Runtime:
         self.pool = ThreadPoolExecutor(max_workers=1)
         for path in self.root.glob("*.json"):
             job = json.loads(path.read_text())
-            request = ScoreRequest.model_validate(job["request"])
+            request = REQUEST_ADAPTER.validate_python(job["request"])
             if job["status"] in {"queued", "running"}:
                 job.update(status="failed", receipt=self.receipt(request, [], "failed", "service_restarted"))
                 self.save(job)
@@ -69,10 +82,10 @@ class Runtime:
         temporary.replace(path)
 
     def receipt(self, request, rows, status="completed", error=None):
-        return ScoreReceipt.model_validate(
+        return RECEIPT_ADAPTER.validate_python(
             sign_receipt(
                 {
-                    "schema_version": "1.0",
+                    "schema_version": request.schema_version,
                     "id": request.id,
                     "experiment_id": request.experiment_id,
                     "report_sha256": request.report_sha256,
@@ -84,6 +97,11 @@ class Runtime:
                     "finished_at": time.time(),
                     "rows": rows,
                     "error_code": error,
+                    **(
+                        {"dataset_sha256": request.dataset_sha256, "partition": request.partition}
+                        if isinstance(request, GroupedScoreRequest)
+                        else {}
+                    ),
                 },
                 self.cfg.token,
             )
@@ -114,6 +132,13 @@ class Runtime:
                 raise HTTPException(409, "suite_changed")
             if {r.case_id for r in request.rows} - {c.case_id for c in self.bundle.cases}:
                 raise HTTPException(422, "case_unsupported")
+            if request.schema_version != self.bundle.schema_version or request.dataset != self.bundle.dataset:
+                raise HTTPException(409, "dataset_mismatch")
+            if isinstance(request, GroupedScoreRequest) and (
+                request.dataset_sha256 != self.bundle.dataset_sha256
+                or request.dataset_manifest != self.bundle.dataset_manifest
+            ):
+                raise HTTPException(409, "dataset_mismatch")
             if sum(j["status"] in {"queued", "running"} for j in self.jobs.values()) >= 4:
                 raise HTTPException(429, "queue_full")
             job = {"request": request.model_dump(), "request_hash": request_hash, "status": "queued"}
@@ -158,7 +183,7 @@ def make_app(cfg):
     async def bounded(request, call_next):
         if request.method == "POST":
             length = request.headers.get("content-length", "")
-            if not length.isdecimal() or int(length) > 2_000_000:
+            if not length.isdecimal() or int(length) > 24_000_000:
                 return JSONResponse({"error": "request_too_large"}, status_code=413)
         return await call_next(request)
 
@@ -172,10 +197,16 @@ def make_app(cfg):
 
     @app.get("/scorer/v1/health", dependencies=[Depends(authorize)])
     def health():
-        return {"ready": True, "suite_sha256": runtime.suite_hash, "image_digest": cfg.image}
+        return {
+            "ready": True,
+            "suite_sha256": runtime.suite_hash,
+            "image_digest": cfg.image,
+            "dataset": runtime.bundle.dataset,
+            "protocol_version": runtime.bundle.schema_version,
+        }
 
     @app.post("/scorer/v1/jobs", status_code=202, dependencies=[Depends(authorize)])
-    def submit(body: ScoreRequest):
+    def submit(body: ScoreSubmission):
         return runtime.submit(body)
 
     @app.get("/scorer/v1/jobs/{job_id}", dependencies=[Depends(authorize)])

@@ -5,7 +5,7 @@ API 根路径为 `/api/v1`。成功返回 `{data, request_id}`，错误返回 `{
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
 | GET | `/health` | 模型、Runner 与自适应模式就绪状态 |
-| POST | `/model/check` | 服务端鉴权及模型列表检查，不触发生成 |
+| POST | `/model/check` | 不付费的模型列表检查；返回 `available` 或明确的 `unverified`，后者不表示鉴权成功 |
 | GET | `/demo-cases` | 五条案例和固定源码 SHA256 |
 | GET | `/stats` | 当前会话的真实统计 |
 | POST | `/ci/preview` | 固定 Run attempt，分页读取失败 Job |
@@ -26,6 +26,7 @@ API 根路径为 `/api/v1`。成功返回 `{data, request_id}`，错误返回 `{
 | POST / GET | `/experiments` | 幂等登记固定开发集清单 / 当前会话的对照列表 |
 | GET | `/evaluation/cases` | 可登记案例的源码与公开日志指纹 |
 | GET | `/evaluation/grouped-plans` | 20 项公开构造任务的完整开发 / 测试分区计划；不执行模型 |
+| GET | `/evaluation/guidance-versions` | 当前会话兼容、开发来源链合格的指导版本；不执行模型 |
 | GET | `/experiments/{id}` | 同预算执行与冻结结果的统计 |
 | POST | `/experiments/{id}/advance` | 返回当前任务或原子安排下一项；可安全重复 |
 | POST | `/experiments/{id}/cancel` | 停止后续安排并取消当前任务 |
@@ -76,7 +77,9 @@ GitHub GET 对暂时连接故障与 500 / 502 / 503 / 504 最多尝试三次；�
 
 开发集对照支持 `schema_version=2.0` 的四组协议，要求固定本地案例、源码及公开日志 hash、修复组相同预算、重复次数与工具开关，经验库关闭。`multi_attempts` 为 2–4，默认 4；日志组最多 2 次调用且不使用源码或 Runner。旧版 `1.0` 保留原两组行为及复算口径。创建需要 Idempotency-Key，不执行模型；推进使用现有 Worker 与任务配额，不接受任意任务 ID 或客户端指标。四组任务的关联重试返回 `experiment_retry_unsupported`，重复实验需新建清单。快照的 `experiment_binding` 记录归属和组别，日志组 `reproduction_status=not_run`；诊断准确率未评分时保持 null。详见[评测 API](evaluation.md)。
 
-`schema_version=3.0` 另接受登记的 [20 项公开构造数据集](grouped-evaluation.md)及完整开发 / 测试分区。请求嵌入 `dataset_manifest`、`dataset_sha256` 和 `partition`，不接受挑选子集、客户端命令或自定义执行路径。沿用上述实验 API、轮换顺序、配额、同预算四组与冻结报告；创建和推进核对固定 Docker 镜像与日志。分组任务尚无独立私有行为包，`POST .../score` 仍拒绝此协议；独立人工诊断审核支持 2.0 / 3.0。
+`schema_version=3.0` 另接受登记的 [20 项公开构造数据集](grouped-evaluation.md)及完整开发 / 测试分区。请求嵌入 `dataset_manifest`、`dataset_sha256` 和 `partition`，不接受挑选子集、客户端命令或自定义执行路径。沿用上述实验 API、轮换顺序、配额、同预算四组与冻结报告；创建和推进核对固定 Docker 镜像与日志。`POST .../score` 已支持分组任务，要求配置匹配的 `BUILDMEDIC_SCORER_DATASET` 及外部 2.0 私有包；完整分区、重复次数、来源与候选随冻结请求绑定，回执逐行校验。`GET /health` 的 `scoring_dataset` 提供所配数据集，页面匹配后才启用评分；独立人工诊断审核继续支持 2.0 / 3.0。
+
+`schema_version=4.0` 在完整分区上增加必填的 `guidance_version_ids`（0–5 个明确版本 ID）。服务端只从当前会话的登记开发来源复制指导，冻结到报告的 `frozen_guidance`；B/C/D 共享指导，A 不接收，不开启在线经验更新。返回字段包括指导内容 SHA、开发来源链及单独统计的训练用量。4.0 沿用分组评分 2.0 和独立诊断审核，签名绑定完整报告 SHA。详见[冻结开发指导](frozen-guidance.md)。
 
 独立评分只处理完成并冻结的四组 Docker 实验，每份实验保留一个固定请求；重复 POST 返回原请求，GET 可在服务恢复后推进同一请求。未启动时 GET 返回 null，未配置时 POST 返回 `scoring_unavailable`。签名、候选或请求绑定不匹配会拒绝回执；服务暂时不可达时保留 pending / running，不填造分数。完成的回执可在评分服务离线后继续读取。`/health.scoring_ready` 仅表示配置就绪。新评分表与旧任务 / 公开报告分开，原报告 hash 及 `hidden_verified=null` 不变，详见[指标口径](scoring.md)。内部 `/scorer/v1/jobs` 与 `/scorer/v1/jobs/{id}` 只用于受认证的 API / 评分节点通信。
 

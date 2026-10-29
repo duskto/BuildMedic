@@ -68,9 +68,11 @@ class EvaluationAnalysis(StrictModel):
     schema_version: Literal["1.0"] = "1.0"
     experiment_id: str
     source_report_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
-    scope: Literal["public-development-descriptive", "public-constructed-grouped-descriptive"] = (
-        "public-development-descriptive"
-    )
+    scope: Literal[
+        "public-development-descriptive",
+        "public-constructed-grouped-descriptive",
+        "public-constructed-frozen-guidance-descriptive",
+    ] = "public-development-descriptive"
     complete: bool
     environment_consistent: bool | None
     repeat_results: list[RepeatResult]
@@ -191,7 +193,9 @@ def analyze(report):
         "schema_version": "1.0",
         "experiment_id": report["id"],
         "source_report_sha256": report["report_sha256"],
-        "scope": "public-constructed-grouped-descriptive"
+        "scope": "public-constructed-frozen-guidance-descriptive"
+        if spec.schema_version == "4.0"
+        else "public-constructed-grouped-descriptive"
         if spec.schema_version == "3.0"
         else "public-development-descriptive",
         "complete": report["status"] == "completed" and report["finished"] == report["planned"],

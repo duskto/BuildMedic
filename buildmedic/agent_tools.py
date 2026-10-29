@@ -230,6 +230,8 @@ class ToolSession:
                 if key in materials
             },
         }
+        if "frozen_guidance" in materials:
+            self.initial["frozen_guidance"] = materials["frozen_guidance"]
 
     def validate(self, call, final=False):
         name = call.function.name

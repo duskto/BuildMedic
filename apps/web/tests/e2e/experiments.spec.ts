@@ -75,6 +75,7 @@ test("grouped registration preserves the complete frozen test partition and does
         variation: [],
         pairs: [],
       };
+    else if (path.endsWith("/score")) data = null;
     else
       throw new Error(
         `Unexpected grouped fixture request: ${route.request().method()} ${path}`,
@@ -96,8 +97,8 @@ test("grouped registration preserves the complete frozen test partition and does
     page.getByText("公开构造分区：测试", { exact: false }),
   ).toBeVisible();
   await expect(
-    page.getByText("分组构造任务尚无独立私有行为评分包。", { exact: false }),
-  ).toBeVisible();
+    page.getByRole("button", { name: "运行独立行为评测" }),
+  ).toBeDisabled();
   expect(created).not.toBeNull();
 });
 

@@ -12,6 +12,14 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ModelCheck(StrictModel):
+    provider: str
+    model_id: str
+    status: Literal["available", "unverified"]
+    checked_at: float
+    message: str
+
+
 class Source(StrictModel):
     type: Literal["demo", "github_actions"] = "demo"
     case_id: str | None = None

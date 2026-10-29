@@ -91,7 +91,22 @@ class GroupedSpec(FourArmSpec):
         return self
 
 
-ExperimentRequest = ExperimentSpec | FourArmSpec | GroupedSpec
+class FrozenGuidanceSpec(GroupedSpec):
+    schema_version: Literal["4.0"]
+    guidance_version_ids: list[str] = Field(max_length=5)
+
+    @model_validator(mode="after")
+    def explicit_versions(self):
+        import re
+
+        if len(set(self.guidance_version_ids)) != len(self.guidance_version_ids) or any(
+            not re.fullmatch(r"[a-f0-9]{32}", v) for v in self.guidance_version_ids
+        ):
+            raise ValueError("guidance_version_ids_must_be_unique_published_ids")
+        return self
+
+
+ExperimentRequest = ExperimentSpec | FourArmSpec | GroupedSpec | FrozenGuidanceSpec
 SPEC_ADAPTER = TypeAdapter(ExperimentRequest)
 
 
@@ -102,7 +117,7 @@ def parse_spec(value):
 def arms(spec):
     return (
         ("logs", "standard", "multi", "adaptive")
-        if spec.schema_version in {"2.0", "3.0"}
+        if spec.schema_version in {"2.0", "3.0", "4.0"}
         else ("standard", "adaptive")
     )
 
@@ -161,9 +176,12 @@ def configuration():
     )
     return {
         "provider": cfg.model_provider,
+        **({"endpoint_mode": cfg.model_endpoint_mode} if cfg.model_endpoint_mode != "official" else {}),
+        **({"token_parameter": cfg.model_token_parameter} if cfg.model_token_parameter != "auto" else {}),
         "model_id": cfg.model_id,
         "endpoint_sha256": hashlib.sha256(cfg.model_base_url.encode()).hexdigest(),
         "thinking": cfg.model_thinking,
+        **({"reasoning_effort": cfg.model_reasoning_effort} if cfg.model_reasoning_effort is not None else {}),
         "max_output_tokens": cfg.max_output_tokens,
         "platform_max_model_calls": cfg.max_model_calls,
         "runner_backend": cfg.runner_backend,
@@ -237,13 +255,13 @@ def create(owner, key, spec):
             >= 50
         ):
             raise store.Conflict("当前会话评测记录已达上限")
-        if spec.schema_version == "3.0":
+        if spec.schema_version in {"3.0", "4.0"}:
             validate_grouped(spec)
         for case in spec.cases:
             if metadata(case.case_id)["snapshot_sha256"] != case.snapshot_sha256:
                 raise store.Conflict("清单源码指纹与当前登记案例不一致")
             if (
-                spec.schema_version in {"2.0", "3.0"}
+                spec.schema_version in {"2.0", "3.0", "4.0"}
                 and captured_log(case.case_id).log_sha256 != case.log_sha256
             ):
                 raise store.Conflict("清单日志指纹与公开归档不一致")
@@ -266,6 +284,11 @@ def create(owner, key, spec):
                     )
         eid = store.uid()
         config = configuration()
+        extra = {}
+        if spec.schema_version == "4.0":
+            from .frozen_guidance import freeze
+
+            extra["frozen_guidance"] = freeze(conn, owner, spec.guidance_version_ids, spec.dataset_manifest)
         conn.execute(
             db.experiments.insert().values(
                 id=eid,
@@ -280,6 +303,7 @@ def create(owner, key, spec):
                     "configuration": config,
                     "configuration_sha256": digest(config),
                     "slots": slots,
+                    **extra,
                 },
             )
         )
@@ -328,7 +352,7 @@ def advance(eid, owner, check_task=None):
                 slot["frozen"] = freeze(conn, task)
                 continue
             assert_runtime(content)
-            if spec.schema_version == "3.0":
+            if spec.schema_version in {"3.0", "4.0"}:
                 validate_grouped(spec)
             expected = next(c for c in spec.cases if c.case_id == slot["case_id"])
             meta = metadata(slot["case_id"])
@@ -340,7 +364,7 @@ def advance(eid, owner, check_task=None):
                 "manifest_sha256": content["manifest_sha256"],
                 "configuration_sha256": content["configuration_sha256"],
             }
-            if spec.schema_version == "3.0":
+            if spec.schema_version in {"3.0", "4.0"}:
                 group = next(c for c in spec.dataset_manifest.cases if c.case_id == slot["case_id"])
                 meta["experiment_binding"].update(
                     dataset_sha256=spec.dataset_sha256,
@@ -348,7 +372,16 @@ def advance(eid, owner, check_task=None):
                     repository_group=group.repository_group,
                     template_group=group.template_group,
                 )
-            if spec.schema_version in {"2.0", "3.0"}:
+            if spec.schema_version == "4.0":
+                from .frozen_guidance import validate_for_manifest
+
+                pack = validate_for_manifest(
+                    content["frozen_guidance"], spec.dataset_manifest, spec.guidance_version_ids
+                )
+                meta["experiment_binding"]["guidance_sha256"] = pack.sha256
+                if slot["mode"] != "logs":
+                    meta["frozen_guidance"] = pack.model_dump()
+            if spec.schema_version in {"2.0", "3.0", "4.0"}:
                 record = captured_log(slot["case_id"])
                 if record.log_sha256 != expected.log_sha256:
                     raise store.Conflict("公开归档日志已变化，不能继续当前清单")
@@ -467,9 +500,16 @@ def observed(snap):
 
 def render(row, include_rows=True):
     content = row["content"]
-    four_arm = content["manifest"]["schema_version"] in {"2.0", "3.0"}
+    four_arm = content["manifest"]["schema_version"] in {"2.0", "3.0", "4.0"}
     spec = parse_spec(content["manifest"]) if four_arm else None
-    if content["manifest"]["schema_version"] == "3.0":
+    pack = None
+    if content["manifest"]["schema_version"] == "4.0":
+        from .frozen_guidance import validate_for_manifest
+
+        pack = validate_for_manifest(
+            content["frozen_guidance"], spec.dataset_manifest, spec.guidance_version_ids
+        )
+    if content["manifest"]["schema_version"] in {"3.0", "4.0"}:
         expected = []
         modes = arms(spec)
         for repeat in range(spec.repeats):
@@ -490,7 +530,7 @@ def render(row, include_rows=True):
         if frozen:
             if digest(frozen["snapshot"]) != frozen["sha256"]:
                 raise store.Conflict("评测归档指纹校验失败")
-            if content["manifest"]["schema_version"] == "3.0":
+            if content["manifest"]["schema_version"] in {"3.0", "4.0"}:
                 snap = frozen["snapshot"]
                 group = next(c for c in spec.dataset_manifest.cases if c.case_id == slot["case_id"])
                 binding = snap.get("experiment_binding", {})
@@ -508,6 +548,10 @@ def render(row, include_rows=True):
                     "arm": slot["mode"],
                     "attempts": spec.multi_attempts if slot["mode"] == "multi" else 1,
                 }
+                if pack is not None:
+                    required["guidance_sha256"] = pack.sha256
+                    if snap.get("frozen_guidance") != (pack.model_dump() if slot["mode"] != "logs" else None):
+                        raise store.Conflict("分组任务未使用整批冻结的共享开发指导")
                 if (
                     binding != required
                     or snap["id"] != slot["task_id"]
@@ -585,12 +629,15 @@ def render(row, include_rows=True):
         "environment_consistent": len(environments) == 1 if environments else None,
         "rows": rows if include_rows else [],
     }
-    if content["manifest"]["schema_version"] == "3.0":
+    if content["manifest"]["schema_version"] in {"3.0", "4.0"}:
         public["scope"] = (
             "公开构造任务的分组对照；分区为 "
             + content["manifest"]["partition"]
             + "；未证明真实仓库泛化或独立行为修复率"
         )
+    if pack is not None:
+        public["frozen_guidance"] = pack.model_dump()
+        public["scope"] += "；三个修复组使用相同的冻结开发指导，训练消耗另计"
     public["report_sha256"] = digest(public)
     return public
 
@@ -644,6 +691,8 @@ def recompute(report):
     ):
         raise store.Conflict("报告的清单或配置指纹不匹配")
     content["slots"] = slots
+    if content["manifest"]["schema_version"] == "4.0":
+        content["frozen_guidance"] = public["frozen_guidance"]
     actual = render({key: public[key] for key in ("id", "status", "created_at")} | {"content": content})
     if actual != public:
         raise store.Conflict("报告统计与冻结输入复算结果不一致")

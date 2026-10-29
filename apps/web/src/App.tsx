@@ -162,12 +162,19 @@ function ModelConnectionCheck() {
         检查模型连接
       </button>
       <small>
-        读取模型列表，不发起付费生成。实际诊断时仍可能遇到余额或生成错误。
+        尝试读取模型列表，不发起付费生成；不支持此检查的服务会明确提示尚未验证。
       </small>
       <ErrorBox error={probe.error} />
       {probe.data && (
-        <div className="notice success" role="status">
-          <Check size={16} />
+        <div
+          className={`notice ${probe.data.status === "available" ? "success" : ""}`}
+          role="status"
+        >
+          {probe.data.status === "available" ? (
+            <Check size={16} />
+          ) : (
+            <Activity size={16} />
+          )}
           <span>
             {probe.data.model_id} · {probe.data.message}
           </span>

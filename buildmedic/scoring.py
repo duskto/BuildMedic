@@ -11,7 +11,16 @@ from sqlalchemy import select, update
 from . import db, evaluation, store
 from .config import settings
 from .errors import AppError
-from .scoring_protocol import ScoreItem, ScoreReceipt, ScoreRequest, fingerprint, verify_receipt
+from .scoring_protocol import (
+    RECEIPT_ADAPTER,
+    REQUEST_ADAPTER,
+    GroupedScoreItem,
+    GroupedScoreRequest,
+    ScoreItem,
+    ScoreRequest,
+    fingerprint,
+    verify_receipt,
+)
 
 
 def existing(conn, eid, owner):
@@ -40,8 +49,11 @@ def reserve(eid, owner):
         if experiment["status"] != "completed":
             raise store.Conflict("独立评分只能在整批实验结束并冻结输入后运行")
         public = evaluation.render(experiment)
-        if public["manifest"]["schema_version"] != "2.0":
+        if public["manifest"]["schema_version"] not in {"2.0", "3.0", "4.0"}:
             raise AppError("score_protocol_unsupported", "独立评分仅支持新版四组完整清单", 422)
+        grouped = public["manifest"]["schema_version"] in {"3.0", "4.0"}
+        if cfg.scorer_dataset != public["manifest"]["dataset"]:
+            raise AppError("scorer_dataset_mismatch", "评分服务配置的数据集与当前实验不一致", 422)
         image = public["configuration"]["runner_image"]
         if public["configuration"]["runner_backend"] != "docker":
             raise AppError("score_requires_docker", "独立行为评测要求修复任务使用固定 Docker 环境", 422)
@@ -78,7 +90,7 @@ def reserve(eid, owner):
             ):
                 raise store.Conflict("冻结执行环境与清单中的 Docker 镜像不一致")
             items.append(
-                ScoreItem(
+                (GroupedScoreItem if grouped else ScoreItem)(
                     index=index,
                     task_id=snap["id"],
                     case_id=row["case_id"],
@@ -87,16 +99,25 @@ def reserve(eid, owner):
                     public_verified=row["metrics"]["public_verified"],
                     patch=patch,
                     patch_sha256=patch_hash,
+                    **({"repeat": row["repeat"]} if grouped else {}),
                 )
             )
         sid = store.uid()
-        body = ScoreRequest(
+        body = (GroupedScoreRequest if grouped else ScoreRequest)(
             id=sid,
             experiment_id=eid,
             report_sha256=public["report_sha256"],
             suite_sha256=cfg.scorer_suite_sha256,
             image_digest=image,
             rows=items,
+            **(
+                {
+                    k: public["manifest"][k]
+                    for k in ("dataset", "dataset_manifest", "dataset_sha256", "partition", "repeats")
+                }
+                if grouped
+                else {}
+            ),
         )
         conn.execute(
             db.experiment_scores.insert().values(
@@ -162,7 +183,7 @@ class ScorerClient:
             chunks, size = [], 0
             async for chunk in response.aiter_bytes():
                 size += len(chunk)
-                if size > 64000:
+                if size > 512000:
                     raise ValueError("scorer_response_limit")
                 chunks.append(chunk)
             return json.loads(b"".join(chunks))
@@ -221,7 +242,13 @@ def public(row):
         "summary": summarize(content["request"], receipt)
         if receipt and receipt["status"] == "completed"
         else [],
-        "scope": "公开开发案例的独立私有行为检查；未评测隔离测试集或诊断准确率",
+        "scope": (
+            "公开构造分组任务的独立行为评分；分区为 "
+            + content["request"]["partition"]
+            + "，未证明真实仓库泛化或诊断准确率"
+        )
+        if content["request"]["schema_version"] == "2.0"
+        else "公开开发案例的独立私有行为检查；未评测隔离测试集或诊断准确率",
     }
 
 
@@ -236,9 +263,10 @@ async def get(eid, owner, client=None):
     if row["status"] in {"completed", "failed"}:
         return public(row)
     cfg = settings()
-    request = ScoreRequest.model_validate(row["content"]["request"])
+    request = REQUEST_ADAPTER.validate_python(row["content"]["request"])
     if (
         cfg.scorer_suite_sha256 != request.suite_sha256
+        or cfg.scorer_dataset != request.dataset
         or hashlib.sha256(cfg.scorer_url.encode()).hexdigest() != row["content"]["endpoint_sha256"]
     ):
         raise store.Conflict("独立评分的固定服务或评分包配置已变化")
@@ -252,7 +280,7 @@ async def get(eid, owner, client=None):
             raise ValueError("scorer_request_mismatch")
         receipt = result.get("receipt")
         if receipt:
-            receipt = verify_receipt(ScoreReceipt.model_validate(receipt), request, cfg.scorer_token)
+            receipt = verify_receipt(RECEIPT_ADAPTER.validate_python(receipt), request, cfg.scorer_token)
             row["content"]["receipt"] = receipt
             row["status"] = receipt["status"]
         else:

@@ -1,6 +1,6 @@
 # 独立私有行为评分
 
-评分服务在整批四组实验完成后，检查已冻结、已选中的补丁。它与公开 Runner、Worker 和模型调用分别运行；只把签名回执和汇总送回 API。评分不修改原任务结论、经验反思或公开实验报告。当前只支持三个公开开发案例，不能把结果称为隔离测试集或泛化能力。
+评分服务在整批四组实验完成后，检查已冻结、已选中的补丁。它与公开 Runner、Worker 和模型调用分别运行；只把签名回执和汇总送回 API。评分不修改原任务结论、经验反思或公开实验报告。当前支持原三个公开开发案例和 20 项公开构造任务的完整分区，尚无真实分组模型成绩或泛化结论。
 
 ## 材料与执行边界
 
@@ -22,8 +22,8 @@ API 要求整批完成、源码与补丁指纹一致，并绑定原报告、固�
 
 | 字段 | 要求 |
 | --- | --- |
-| `schema_version` / `suite_id` / `version` | 固定为 `1.0`，明确名称与正整数版本 |
-| `dataset` | 当前仅 `public-development` |
+| `schema_version` / `suite_id` / `version` | 原三案例包为 `1.0`，明确名称与正整数版本；分组包为 `2.0`，见下文 |
+| `dataset` | 原三案例使用 `public-development` |
 | `development_groups` / `test_groups` | 组名列表，内部去重且两侧不得重叠 |
 | `cases` | 最多三个登记案例，包含 `case_id`、`group`、`snapshot_sha256`、`probes` |
 | `group` | 当前公开案例必须属于开发组，拒绝将其标成隔离测试组 |
@@ -58,6 +58,7 @@ API / Worker 的 `.env` 仅增加：
 BUILDMEDIC_SCORER_URL=http://127.0.0.1:8002
 BUILDMEDIC_SCORER_TOKEN=the-same-internal-token
 BUILDMEDIC_SCORER_SUITE_SHA256=the-validated-bundle-fingerprint
+BUILDMEDIC_SCORER_DATASET=public-development
 ```
 
 地址只接受 HTTPS 或本机 HTTP，禁止重定向。镜像必须与被冻结实验的固定 Docker 镜像一致。设置后重启 API，在已完成四组清单详情页点击“运行独立行为评测”，或复用原私有会话文件：
@@ -85,6 +86,61 @@ API：`POST /api/v1/experiments/{id}/score` 启动或恢复同一请求，`GET` 
 
 ## 验收范围
 
+新增分组协议的自动化验收使用明确公开的合成向量，运行 20 项原始源码及显式 QA 修复的真实 Docker 观测，覆盖共享默认参数与事务回滚。完整 HTTP 闭环分别提交开发 / 测试分区的 40 行请求，校验 80 行签名结果与分母；这只证明评分链路和 QA 修复可执行，不是模型成绩，也不构成生产私有题库。另证明通过公开回归的分组过拟合补丁可被独立输入判为失败，并检测新增行为回归。
+
 CI 中的私有包是测试期间在临时目录生成的明确替身，不是实际生产私有材料。真实 Docker 检查证明：一个通过公开回归的过拟合补丁，会在独立输入下被判为误报并出现新增回归；断言和期望值没有传入候选容器。
 
 开发验收使用外部包对已有四组实验 `ba1b112388f2407b88c3521d59783172` 评分，没有新增模型调用。9 个选中补丁均通过独立行为与公开回归，评分异常为零，日志组不参与此行为评分。该结果只覆盖熟悉的开发案例，尚未建立 20–30 个真实分组隔离任务，也没有真实诊断准确率或泛化收益结论。诊断审核另见[离线人工审核流程](diagnosis-review.md)，与本行为回执独立。
+
+## 20 项分组任务的评分包
+
+公开实验协议 3.0 对应评分请求、回执及私有包的 2.0 协议；原实验 2.0 对应评分 1.0，保持原请求字节与签名口径。分组包包含：
+
+| 字段 | 要求 |
+| --- | --- |
+| `schema_version` | `2.0` |
+| `suite_id` / `version` | 明确名称与正整数版本 |
+| `dataset` | `public-constructed-grouped` |
+| `dataset_manifest` | 复制固定的完整 20 项公开清单 `evaluation/grouped-dataset.json` |
+| `dataset_sha256` | 完整清单规范化指纹，与实验冻结值一致 |
+| `cases` | 覆盖清单的每个案例，无遗漏或重复；每项含 `case_id`、`group`、`snapshot_sha256`、`probes` |
+| `group` | 与公开清单的 `template_group` 一致，不能重标开发 / 测试关系 |
+| `probes` | 每项 1–50 个独立输入，结构与 1.0 相同；仅允许固定登记入口 |
+
+只把格式和公开身份复制到外部包，实际输入与期望答案由可信数据管理员独立维护。不要用 `tests/support/synthetic_probes.json` 冒充私有评分包；它是已公开的测试替身，用于验证流程，无隐藏性。该文件不进入 Solver / Proposer 材料。
+
+除原三案例入口外，新增入口为：
+
+| 案例 | 固定入口 |
+| --- | --- |
+| mutable-default | `append_value` |
+| csv-quoting | `encode_row` |
+| merge-precedence | `merge_config` |
+| stable-dedup | `unique` |
+| fullmatch | `valid_identifier` |
+| clamp | `clamp` |
+| weighted-mean | `weighted_mean` |
+| graph-cycle | `has_cycle` |
+| leap-year | `is_leap` |
+| utf8-size | `fits_utf8` |
+| version-order | `sorted_versions` |
+| missing-sentinel | `value_or_default` |
+| boolean-parser | `parse_boolean` |
+| zip-length | `pair_records` |
+| rollback | `rollback_mapping` |
+| fraction-sign | `reduce_fraction` |
+| path-containment | `is_within` |
+
+每次容器观测按给定顺序执行同一案例的 probes，同一模块实例保留调用间状态；每条结果会在下一次调用前复制为 JSON 值，因此能检测默认参数污染，同时避免后续修改覆盖先前观测。不同候选、原始源码及其他案例均使用新容器。
+
+`rollback_mapping` 是固定网关场景，不接受代码或回调：三个位置参数分别为初始映射、更新映射、待删除键列表。网关在候选 `transaction` 上下文中执行更新和删除，再抛出受控异常，返回异常后的映射供协调器比较。期望答案仍留在容器外。结果不可序列化或出现非有限浮点数会记录观测错误，不能当作函数抛出了预期 `ValueError` / `TypeError` 获得通过。
+
+用同一 `scripts/check_scoring_bundle.py` 校验外部 2.0 包并取得指纹；失败只给出通用错误，不打印私有输入、期望值或 traceback。包文件上限 600 KB，分组评分请求上限 24 MB / 360 行，API 接收回执上限 512 KB。HTTP 请求绑定完整分区、重复轮次、轮换顺序、来源及候选，拒绝删项、重排、跨分区或指纹不一致。
+
+评分节点配置方式相同，API 另选择对应数据集：
+
+```dotenv
+BUILDMEDIC_SCORER_DATASET=public-constructed-grouped
+```
+
+在评分节点使用新的外部包，更新 API 的包指纹与服务配置后，再从页面或 `scripts/run_scoring.py` 启动评分。页面和 API 会提前拒绝数据集配置不匹配，不创建误投的评分记录。待处理请求绑定原服务、包和数据集；切换配置后需恢复原配置才能继续。已封存的历史回执继续可读，无须重新运行模型或改写原报告。

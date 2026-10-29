@@ -2,23 +2,16 @@
 
 import hashlib
 import hmac
-import json
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, TypeAdapter, model_validator
 
+from .evaluation_dataset import DatasetManifest, Sha, Slug
+from .fingerprints import canonical, fingerprint
 from .schemas import StrictModel
 
 CaseId = Literal["pagination", "imports", "signature"]
 Arm = Literal["logs", "standard", "multi", "adaptive"]
-
-
-def canonical(value):
-    return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()
-
-
-def fingerprint(value):
-    return hashlib.sha256(canonical(value)).hexdigest()
 
 
 class ScoreItem(StrictModel):
@@ -113,6 +106,65 @@ class ScoreReceipt(StrictModel):
     signature: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class GroupedScoreItem(ScoreItem):
+    index: int = Field(ge=0, le=359, strict=True)
+    case_id: Slug
+    repeat: int = Field(ge=1, le=3, strict=True)
+
+
+class GroupedScoreRequest(ScoreRequest):
+    schema_version: Literal["2.0"] = "2.0"
+    dataset: Literal["public-constructed-grouped"] = "public-constructed-grouped"
+    dataset_manifest: DatasetManifest
+    dataset_sha256: Sha
+    partition: Literal["development", "test"]
+    repeats: int = Field(ge=1, le=3, strict=True)
+    rows: list[GroupedScoreItem] = Field(min_length=1, max_length=360)
+
+    @model_validator(mode="after")
+    def complete_partition(self):
+        manifest = self.dataset_manifest
+        if (
+            manifest.purpose != "grouped-benchmark"
+            or fingerprint(manifest.model_dump()) != self.dataset_sha256
+        ):
+            raise ValueError("grouped_scoring_dataset_mismatch")
+        cases = [c for c in manifest.cases if c.split == self.partition]
+        expected = []
+        modes = ("logs", "standard", "multi", "adaptive")
+        for repeat in range(self.repeats):
+            for index, case in enumerate(cases):
+                offset = (repeat + index) % len(modes)
+                expected.extend(
+                    (case.case_id, case.snapshot_sha256, repeat + 1, mode)
+                    for mode in modes[offset:] + modes[:offset]
+                )
+        actual = [(r.case_id, r.snapshot_sha256, r.repeat, r.arm) for r in self.rows]
+        if actual != expected:
+            raise ValueError("grouped_score_requires_complete_partition_order")
+        if len(canonical(self.model_dump())) > 24_000_000:
+            raise ValueError("score_request_limit")
+        return self
+
+
+class GroupedScoreRow(ScoreRow):
+    index: int = Field(ge=0, le=359, strict=True)
+    case_id: Slug
+    repeat: int = Field(ge=1, le=3, strict=True)
+
+
+class GroupedScoreReceipt(ScoreReceipt):
+    schema_version: Literal["2.0"] = "2.0"
+    dataset_sha256: Sha
+    partition: Literal["development", "test"]
+    rows: list[GroupedScoreRow] = Field(max_length=360)
+
+
+ScoreSubmission = ScoreRequest | GroupedScoreRequest
+REQUEST_ADAPTER = TypeAdapter(ScoreSubmission)
+RECEIPT_ADAPTER = TypeAdapter(ScoreReceipt | GroupedScoreReceipt)
+
+
 def sign_receipt(data, secret):
     return {**data, "signature": hmac.new(secret.encode(), canonical(data), hashlib.sha256).hexdigest()}
 
@@ -124,16 +176,26 @@ def verify_receipt(receipt, request, secret):
         raise ValueError("评分签名不匹配")
     if any(
         getattr(receipt, key) != getattr(request, key)
-        for key in ("id", "experiment_id", "report_sha256", "suite_sha256", "image_digest")
+        for key in ("schema_version", "id", "experiment_id", "report_sha256", "suite_sha256", "image_digest")
     ) or receipt.request_sha256 != fingerprint(request.model_dump()):
         raise ValueError("评分回执不属于当前冻结请求")
+    if isinstance(request, GroupedScoreRequest) and (
+        not isinstance(receipt, GroupedScoreReceipt)
+        or receipt.dataset_sha256 != request.dataset_sha256
+        or receipt.partition != request.partition
+    ):
+        raise ValueError("评分回执的数据集或分区不匹配")
     if receipt.status == "completed":
         if len(receipt.rows) != len(request.rows):
             raise ValueError("评分回执缺少任务")
         for expected, actual in zip(request.rows, receipt.rows):
             if any(
                 getattr(expected, key) != getattr(actual, key)
-                for key in ("index", "task_id", "case_id", "arm", "patch_sha256")
+                for key in (
+                    ("index", "task_id", "case_id", "arm", "patch_sha256", "repeat")
+                    if isinstance(request, GroupedScoreRequest)
+                    else ("index", "task_id", "case_id", "arm", "patch_sha256")
+                )
             ):
                 raise ValueError("评分行与冻结候选不匹配")
     return receipt.model_dump()

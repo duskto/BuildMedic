@@ -7,6 +7,7 @@ import httpx
 
 from .config import settings
 from .errors import AppError, Blocked
+from .model_providers import OFFICIAL_ENDPOINTS, completion_parameters, kimi_always_thinks, tools_supported
 from .schemas import NativeAssistant
 from .security import sanitize
 
@@ -108,20 +109,29 @@ class ModelClient:
             raise AppError("model_configuration", "模型 API 地址端口无效", 422) from exc
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise AppError("model_configuration", "模型 API 地址不能包含凭据、查询参数或片段", 422)
-        if cfg.model_provider == "deepseek":
+        if cfg.model_endpoint_mode == "official" and cfg.model_provider in OFFICIAL_ENDPOINTS:
             if (
                 parsed.scheme != "https"
-                or parsed.hostname != "api.deepseek.com"
                 or port not in (None, 443)
-                or parsed.path.rstrip("/") not in ("", "/v1")
+                or (parsed.hostname, parsed.path.rstrip("/")) not in OFFICIAL_ENDPOINTS[cfg.model_provider]
             ):
                 raise AppError(
-                    "model_configuration", "DeepSeek 官方模式只接受 https://api.deepseek.com 或 /v1", 422
+                    "model_configuration", "所选服务商与官方 API 根地址不匹配，请参照模型接入说明", 422
                 )
         elif parsed.scheme != "https" and not (
             parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
         ):
             raise AppError("model_configuration", "模型服务须使用 HTTPS，本机开发地址可使用 HTTP", 422)
+        if (
+            cfg.model_provider == "kimi"
+            and kimi_always_thinks(cfg.model_id)
+            and cfg.model_thinking != "enabled"
+        ):
+            raise AppError(
+                "model_configuration",
+                "所选 Kimi 模型始终思考，请设 MODEL_THINKING=enabled 或换用可关闭思考的模型",
+                422,
+            )
         return cfg
 
     def check_status(self, response):
@@ -173,9 +183,16 @@ class ModelClient:
             raise AppError("model_format_error", "模型服务响应格式不合法", 502) from exc
 
     async def probe(self):
-        """Read model availability without triggering a paid completion."""
+        """Read model availability where supported; never trigger a paid completion."""
         cfg = self.configuration()
-        data = await self.request_json("GET", "/models")
+        if cfg.model_provider == "glm" and cfg.model_endpoint_mode == "official":
+            return self.unverified_probe(cfg)
+        try:
+            data = await self.request_json("GET", "/models")
+        except AppError as exc:
+            if cfg.model_endpoint_mode == "relay" and exc.details.get("provider_status") in {404, 405, 501}:
+                return self.unverified_probe(cfg)
+            raise
         if not isinstance(data, dict) or not isinstance(data.get("data"), list):
             raise AppError("model_format_error", "模型列表响应格式不合法", 502)
         ids = {m.get("id") for m in data["data"] if isinstance(m, dict) and isinstance(m.get("id"), str)}
@@ -202,10 +219,21 @@ class ModelClient:
             raise AppError("model_format_error", "模型返回的文本编码无效", 502) from exc
         return content, usage
 
+    @staticmethod
+    def unverified_probe(cfg):
+        return {
+            "provider": cfg.model_provider,
+            "model_id": cfg.model_id,
+            "status": "unverified",
+            "checked_at": time.time(),
+            "message": "当前接口不支持模型列表检查；配置格式有效，尚未验证密钥或生成能力。"
+            "可在服务端运行 check_model.py --generate 进行一次付费检查。",
+        }
+
     async def tool_turn(self, messages, tools):
         cfg = self.configuration()
-        if cfg.model_provider == "deepseek" and cfg.model_thinking != "disabled":
-            raise Blocked("工具诊断需要关闭 DeepSeek 思考模式；平台不保存或回传私有思维链")
+        if not tools_supported(cfg):
+            raise Blocked("当前模型或思考配置不支持工具诊断；请选择可关闭思考的模型并关闭思考模式")
         message, usage = await self._chat(messages, tools=tools)
         try:
             calls = message.get("tool_calls") or []
@@ -236,14 +264,12 @@ class ModelClient:
         body = {
             "model": cfg.model_id,
             "messages": messages,
-            "max_tokens": cfg.max_output_tokens,
+            **completion_parameters(cfg),
         }
         if tools is None:
             body["response_format"] = {"type": "json_object"}
         else:
             body.update(tools=tools, tool_choice="auto")
-        if cfg.model_provider == "deepseek":
-            body["thinking"] = {"type": cfg.model_thinking}
         data = await self.request_json("POST", "/chat/completions", body)
         try:
             choice = data["choices"][0]

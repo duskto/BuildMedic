@@ -31,7 +31,7 @@ async def check(generate=False):
             if json.loads(content) != {"ok": True}:
                 raise AppError("model_probe_content", "生成响应未通过最小 JSON 校验", 502)
             print(json.dumps({"generation": "passed", **model.metadata, "usage": usage}, ensure_ascii=False))
-        return 0
+        return 0 if generate or info["status"] == "available" else 2
     except (AppError, Blocked, ValueError) as exc:
         # Never print provider bodies, raw requests, configuration values or tracebacks.
         print(
